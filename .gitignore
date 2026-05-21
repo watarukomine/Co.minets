@@ -1,0 +1,60 @@
+# Firebase
+.firebase/
+.firebaserc
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary / Cache / RPA Profile
+chrome_profile_rpa/
+edge_profile_rpa/
+downloads/
+downloads_daily/
+downloads_egz100/
+downloads_failed_20260325_1500/
+excel_uploads/
+extracted_data/
+master_data/
+data/
+
+# Huge Data Files (GitHub files >100MB are rejected)
+data_matrix.json
+*.xlsx
+*.xls
+*.csv
+
+# Security (Do NOT commit service accounts)
+service-account.json
+
+# PDF outputs / Local tests
+*.pdf
+*.log
+*.png
+*.img
+write_test.txt
+test_log.txt
+test.bat
+button_scan.json
+deep_scan.json
+dom_scan_results.json
+dropdown_debug.json
+iframe_scan_v2.json
+sync_progress.json
+table_dump.txt
+sheets_7_8_9_10_dump.txt
+dom_dump.txt
+dashboard_dom.html
+portal_dom.html
+extracted_summary.json
+
+# Python local envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/

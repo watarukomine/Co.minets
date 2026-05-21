@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategy Engine | Analysis & Proposal Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&family=Noto+Sans+JP:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'Noto Sans JP', 'sans-serif'] },
+                    colors: { emerald: { 500: '#10b981' }, slate: { 950: '#020617' } }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-card { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .proposal-field { background: #ffffff; color: #1e293b; border-radius: 2rem; box-shadow: 0 40px 60px -15px rgba(0, 0, 0, 0.5); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        @media print { .no-print { display: none; } body { background: white; } .proposal-field { box-shadow: none; width: 100%; border: none; } }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 min-h-screen font-sans">
+    <header class="h-20 glass sticky top-0 z-50 flex items-center justify-between px-10 border-b border-white/5 no-print">
+        <div class="flex items-center gap-6">
+            <a href="master_dashboard.html" class="p-2 hover:bg-white/5 rounded-full transition-all">
+                <i data-lucide="layout-grid" class="w-5 h-5 text-emerald-500"></i>
+            </a>
+            <div class="h-8 w-px bg-white/10"></div>
+            <div>
+                <h1 class="text-lg font-black tracking-tighter uppercase">分析＆<span class="text-emerald-500">提案資料作成</span>エンジン</h1>
+                <p class="text-[8px] font-bold text-slate-500 tracking-[0.3em] leading-none uppercase">Marketing Section | Kanagawa Branch</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="window.print()" class="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-4 h-4"></i> 提案書を出力
+            </button>
+        </div>
+    </header>
+
+    <div class="max-w-[1600px] mx-auto p-10 grid grid-cols-12 gap-10">
+        <aside class="col-span-12 lg:col-span-3 space-y-8 no-print">
+            <div class="glass-card rounded-3xl p-8 space-y-8">
+                <div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">分析対象</h2>
+                    <select id="branchSelect" onchange="runAnalysis()" class="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"></select>
+                </div>
+                <div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">分析期間</h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="startMonthSelect" onchange="runAnalysis()" class="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-[10px] font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"></select>
+                        <select id="endMonthSelect" onchange="runAnalysis()" class="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-[10px] font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"></select>
+                    </div>
+                </div>
+                <div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">目的変数</h2>
+                    <select id="metricSelect" onchange="runAnalysis()" class="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"></select>
+                </div>
+                <div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">説明変数 (要因)</h2>
+                    <div id="factorList" class="space-y-1.5 max-h-[400px] overflow-y-auto custom-scrollbar pr-2"></div>
+                </div>
+            </div>
+            <div id="statsPanel" class="glass-card rounded-3xl p-8 space-y-6"></div>
+        </aside>
+
+        <main class="col-span-12 lg:col-span-9 space-y-10">
+            <section class="glass-card rounded-3xl p-10 no-print">
+                <div class="h-[450px]"><canvas id="mainChart"></canvas></div>
+            </section>
+
+            <section class="proposal-field p-20 animate-fade-in text-slate-900">
+                <div class="flex justify-between items-start mb-20">
+                    <div class="space-y-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-1 bg-emerald-500"></div>
+                            <span class="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Strategy Insight</span>
+                        </div>
+                        <h2 class="text-5xl font-black tracking-tight leading-tight">
+                            <span id="doc-branch">支社</span><br>事業戦略・要因分析報告書
+                        </h2>
+                    </div>
+                    <div class="text-right space-y-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase">TOYOTA Mobility Parts Kanagawa Branch</p>
+                        <p class="text-[10px] font-black text-emerald-600">Solution Produce Department | Marketing Section</p>
+                        <p class="text-[10px] font-black text-slate-300 mt-2">GENERATE AT: <span id="doc-date"></span></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-20 mb-20">
+                    <div class="space-y-8">
+                        <h3 class="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] border-b border-emerald-100 pb-3">エグゼクティブ・サマリー</h3>
+                        <p id="ai-text" class="text-xl font-medium leading-relaxed text-slate-700 italic">分析を行っています...</p>
+                    </div>
+                    <div class="space-y-8">
+                        <h3 class="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] border-b border-emerald-100 pb-3">統計的有意性</h3>
+                        <div id="doc-stats" class="grid grid-cols-1 gap-4"></div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 rounded-[2rem] p-12 mb-20">
+                    <div class="h-[350px]"><canvas id="docChart"></canvas></div>
+                </div>
+
+                <div class="space-y-6">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">具体的アクションプラン</h3>
+                    <textarea class="w-full border-none bg-slate-50 rounded-2xl p-8 text-lg font-medium text-slate-700 leading-relaxed outline-none min-h-[200px]" placeholder="ここに現場への指示内容を入力してください..."></textarea>
+                </div>
+
+                <footer class="mt-24 pt-10 border-t border-slate-100 flex justify-between items-center opacity-50">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Marketing Section | Kanagawa Branch</span>
+                    <span class="text-[9px] font-black text-slate-400">Solution Produce Department</span>
+                </footer>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const PROJECT_ID = "cominet-8799b", DATABASE_ID = "cominets";
+        const BASE_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
+        let DATA_MATRIX = { results: {}, factors: {}, factorTypes: [], metrics: [], branches: [], timeline: [] };
+        let currentSelection = { branch: "", metric: "", factor: "" }, mainChart = null, docChart = null;
+
+        async function init() {
+            lucide.createIcons(); document.getElementById('doc-date').textContent = new Date().toLocaleDateString('ja-JP');
+            const res = await fetch(`${BASE_URL}/dashboard_metadata/current`);
+            const data = await res.json();
+            DATA_MATRIX = { ...DATA_MATRIX, ...fromFirestoreValue({ mapValue: { fields: data.fields } }) };
+            
+            // 支社選択 (コード付きの名前に対応)
+            const defaultBranch = DATA_MATRIX.branches.find(b => b.includes("神奈川支社")) || DATA_MATRIX.branches[0];
+            setupSelect('branchSelect', DATA_MATRIX.branches, defaultBranch);
+            setupSelect('metricSelect', DATA_MATRIX.metrics, "売上");
+            
+            // 期間選択の初期化
+            const months = [...new Set(DATA_MATRIX.timeline.map(t => t.substring(0, 7)))].sort();
+            setupSelect('startMonthSelect', months, months[months.length - 12] || months[0]);
+            setupSelect('endMonthSelect', months, months[months.length - 1]);
+
+            currentSelection.branch = document.getElementById('branchSelect').value;
+            currentSelection.metric = document.getElementById('metricSelect').value;
+            currentSelection.factor = DATA_MATRIX.factorTypes[0];
+            renderFactorList(); runAnalysis();
+        }
+
+        function fromFirestoreValue(v) {
+            if (!v) return null;
+            if (v.stringValue) return v.stringValue;
+            if (v.integerValue) return parseInt(v.integerValue);
+            if (v.doubleValue) return parseFloat(v.doubleValue);
+            if (v.arrayValue) return v.arrayValue.values ? v.arrayValue.values.map(fromFirestoreValue) : [];
+            if (v.mapValue) {
+                let res = {}; for (let k in v.mapValue.fields) res[k] = fromFirestoreValue(v.mapValue.fields[k]);
+                return res;
+            }
+            return null;
+        }
+
+        function setupSelect(id, items, defaultVal) {
+            const el = document.getElementById(id);
+            el.innerHTML = items.map(i => `<option value="${i}" ${i === defaultVal ? 'selected' : ''}>${i}</option>`).join('');
+        }
+
+        function renderFactorList() {
+            const container = document.getElementById('factorList');
+            container.innerHTML = DATA_MATRIX.factorTypes.map(f => {
+                const active = currentSelection.factor === f;
+                return `<div onclick="setFactor('${f}')" class="flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${active ? 'bg-emerald-500/10 border-emerald-500/40 text-white' : 'border-white/5 hover:bg-white/5'}"><span class="text-[10px] font-bold">${f}</span></div>`;
+            }).join('');
+        }
+
+        function setFactor(f) { currentSelection.factor = f; renderFactorList(); runAnalysis(); }
+
+        async function fetchAnalysisData() {
+            const b = currentSelection.branch, m = currentSelection.metric, f = currentSelection.factor;
+            const startMonth = document.getElementById('startMonthSelect').value;
+            const endMonth = document.getElementById('endMonthSelect').value;
+            
+            const allMonths = [...new Set(DATA_MATRIX.timeline.map(t => t.substring(0, 7)))].sort();
+            const startIndex = allMonths.indexOf(startMonth);
+            const endIndex = allMonths.indexOf(endMonth);
+            const months = allMonths.slice(startIndex, endIndex + 1);
+
+            const results = { x: [], y: [], labels: months };
+            
+            // ルートと分類の定義 (売上・粗利の主要構成を合算)
+            const routes = ["a-00 総販", "b-01 販売店"];
+            const cats = ["100_総売上", "110_総売上（除通信事業）"];
+
+            for (let mon of months) {
+                // 1. 要因データの取得
+                const fRes = await fetch(`${BASE_URL}/dashboard_factors/${encodeURIComponent(`${b}_${mon}`)}`);
+                let fVal = 0; 
+                if (fRes.ok) { 
+                    const d = await fRes.json(); 
+                    const factors = fromFirestoreValue(d.fields.s) || {};
+                    fVal = factors[f] || 0; 
+                }
+                
+                // 2. 実績データの取得と集計
+                let yVal = 0;
+                for (let r of routes) {
+                    for (let c of cats) {
+                        const doc_id = `${m}_${r}_${c}`.replace(/\//g, "-").replace(/\s/g, "");
+                        const sRes = await fetch(`${BASE_URL}/dashboard_data/${encodeURIComponent(doc_id)}/branches/${encodeURIComponent(b)}`);
+                        if (sRes.ok) { 
+                            const sd = await sRes.json(); 
+                            const cur = fromFirestoreValue(sd.fields.c) || [];
+                            const ext = fromFirestoreValue(sd.fields.c_ext) || [];
+                            // c と c_ext を結合（必要に応じて）
+                            const fullData = cur.concat(ext);
+                            
+                            DATA_MATRIX.timeline.forEach((d, i) => { 
+                                if (d.startsWith(mon)) {
+                                    yVal += fullData[i] || 0; 
+                                }
+                            }); 
+                        }
+                    }
+                }
+                results.x.push(fVal); 
+                results.y.push(yVal);
+            }
+            return results;
+        }
+
+        async function runAnalysis() {
+            currentSelection.branch = document.getElementById('branchSelect').value;
+            currentSelection.metric = document.getElementById('metricSelect').value;
+            const data = await fetchAnalysisData();
+            if (data.x.every(v => v === 0)) return;
+            const points = data.x.map((x, i) => [x, data.y[i]]);
+            const reg = ss.linearRegression(points), line = ss.linearRegressionLine(reg), r = ss.sampleCorrelation(data.x, data.y), r2 = (r * r).toFixed(3);
+            renderMainChart(data, line); renderDocChart(data); updateProposal(data, reg, r, r2);
+        }
+
+        function renderMainChart(data, line) {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (mainChart) mainChart.destroy();
+            mainChart = new Chart(ctx, {
+                data: { datasets: [{ type: 'scatter', label: '実績データ', data: data.x.map((x, i) => ({x, y: data.y[i]})), backgroundColor: '#10b981', pointRadius: 8 }, { type: 'line', data: [{x: Math.min(...data.x), y: line(Math.min(...data.x))}, {x: Math.max(...data.x), y: line(Math.max(...data.x))}], borderColor: 'rgba(255,255,255,0.2)', borderDash: [5,5], pointRadius: 0, fill: false }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function renderDocChart(data) {
+            const ctx = document.getElementById('docChart').getContext('2d');
+            if (docChart) docChart.destroy();
+            docChart = new Chart(ctx, { type: 'line', data: { labels: data.labels, datasets: [{ label: '売上実績', data: data.y, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4, yAxisID: 'y' }, { label: currentSelection.factor, data: data.x, type: 'bar', backgroundColor: 'rgba(30, 41, 59, 0.05)', yAxisID: 'y1' }] }, options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: true }, y1: { display: true, position: 'right' } } } });
+        }
+
+        function updateProposal(data, reg, r, r2) {
+            document.getElementById('ai-text').innerHTML = `${currentSelection.branch}における売上と${currentSelection.factor}を解析した結果、相関係数${r.toFixed(3)}が確認されました。統計的には、${currentSelection.factor}が1単位増加するごとに、売上は約${Math.floor(reg.m).toLocaleString()}円の変動をもたらす可能性があります。`;
+            document.getElementById('doc-stats').innerHTML = `<div class="flex justify-between p-5 bg-white border rounded-2xl"><span class="text-[9px] font-black">寄与係数</span><span class="text-xl font-black text-emerald-600">¥${Math.floor(reg.m).toLocaleString()}</span></div>`;
+            document.getElementById('statsPanel').innerHTML = `<div class="space-y-4"><h3 class="text-[10px] font-black text-emerald-500 uppercase">Confidence Score</h3><div class="text-4xl font-black text-white">${(Math.abs(r)*100).toFixed(0)}%</div></div>`;
+        }
+        init();
+    </script>
+</body>
+</html>

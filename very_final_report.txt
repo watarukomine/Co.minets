@@ -1,0 +1,53 @@
+Checking data extraction status...
+
+Summary:
+  - Total expected: 294
+  - Files found: 268
+  - Missing: 26
+
+Missing files (Retry needed):
+  - 【売上】a-00 総販_200_重点商品.csv
+    (Note: error_200_重点商品.png exists in downloads)
+  - 【売上】a-00 総販_211_特販6品目.csv
+  - 【売上】b-01 販売店_110_総売上（除通信事業）.csv
+    (Note: error_110_総売上（除通信事業）.png exists in downloads)
+  - 【売上】b-01 販売店_212_競争品.csv
+    (Note: error_212_競争品.png exists in downloads)
+  - 【売上】b-01 販売店_310_外装部品.csv
+  - 【売上】b-01 販売店_906_一般部品（S部品除き）.csv
+    (Note: error_906_一般部品（S部品除き）.png exists in downloads)
+  - 【売上】b-02 外販_222_ミシュランタイヤ.csv
+    (Note: error_222_ミシュランタイヤ.png exists in downloads)
+  - 【売上】b-03 ジェームス_212_競争品.csv
+    (Note: error_212_競争品.png exists in downloads)
+  - 【売上】c-01 卸売_906_一般部品（S部品除き）.csv
+    (Note: error_906_一般部品（S部品除き）.png exists in downloads)
+  - 【売上】c-02 直売_200_重点商品.csv
+    (Note: error_200_重点商品.png exists in downloads)
+  - 【売上】c-02 直売_400_用品.csv
+  - 【売上】d-01 部品商_200_重点商品.csv
+    (Note: error_200_重点商品.png exists in downloads)
+  - 【売上】d-01 部品商_400_用品.csv
+  - 【粗利】b-01 販売店_211_特販6品目.csv
+  - 【粗利】b-02 外販_220_タイヤ.csv
+  - 【粗利】c-01 卸売_200_重点商品.csv
+    (Note: error_200_重点商品.png exists in downloads)
+  - 【粗利】c-01 卸売_906_一般部品（S部品除き）.csv
+    (Note: error_906_一般部品（S部品除き）.png exists in downloads)
+  - 【粗利】c-02 直売_212_競争品.csv
+    (Note: error_212_競争品.png exists in downloads)
+  - 【粗利】c-02 直売_213_クリーンエアフィルター.csv
+    (Note: error_213_クリーンエアフィルター.png exists in downloads)
+  - 【粗利】c-02 直売_222_ミシュランタイヤ.csv
+    (Note: error_222_ミシュランタイヤ.png exists in downloads)
+  - 【粗利】c-02 直売_906_一般部品（S部品除き）.csv
+    (Note: error_906_一般部品（S部品除き）.png exists in downloads)
+  - 【粗利】d-01 部品商_110_総売上（除通信事業）.csv
+    (Note: error_110_総売上（除通信事業）.png exists in downloads)
+  - 【粗利】d-01 部品商_210_特販部品.csv
+    (Note: error_210_特販部品.png exists in downloads)
+  - 【粗利】d-01 部品商_221_GYタイヤ.csv
+    (Note: error_221_GYタイヤ.png exists in downloads)
+  - 【粗利】d-01 部品商_400_用品.csv
+  - 【粗利】d-01 部品商_906_一般部品（S部品除き）.csv
+    (Note: error_906_一般部品（S部品除き）.png exists in downloads)

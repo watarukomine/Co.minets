@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マスタ連動クロス分析ダッシュボード</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- クレンジング結果のJavaScriptデータを直接読み込む -->
+    <script src="excel_uploads/dashboard_data.js"></script>
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f8fafc; overflow: hidden; }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(0, 0, 0, 0.05); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-screen flex text-slate-800">
+
+    <!-- Sidebar / Filters -->
+    <aside class="w-80 h-full border-r bg-white flex flex-col shadow-lg z-10 glass-panel">
+        <div class="p-6 border-b border-slate-100">
+            <a href="master_dashboard.html" class="flex items-center gap-2 text-[10px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest mb-4 transition-colors">
+                <i data-lucide="chevron-left" class="w-4 h-4"></i>Back to Portal
+            </a>
+            <h1 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <i data-lucide="blocks" class="text-indigo-500"></i>
+                クロス集計分析
+            </h1>
+            <p class="text-[10px] text-slate-400 mt-1 font-bold">マスタ連携済データプレビュー</p>
+        </div>
+
+        <div class="p-4 flex-1 overflow-y-auto custom-scrollbar space-y-6">
+            
+            <!-- Summary Code Filter -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs font-black text-slate-500 uppercase tracking-widest">Zサマリーコード (マスタ情報)</label>
+                    <button onclick="clearFilter('summary')" class="text-[10px] text-slate-400 hover:text-indigo-500 font-bold">クリア</button>
+                </div>
+                <div id="filter-summary" class="space-y-1"></div>
+            </div>
+
+            <!-- Block Name Filter -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs font-black text-slate-500 uppercase tracking-widest">ブロック・拠点</label>
+                    <button onclick="clearFilter('block')" class="text-[10px] text-slate-400 hover:text-indigo-500 font-bold">クリア</button>
+                </div>
+                <div id="filter-block" class="space-y-1"></div>
+            </div>
+            
+        </div>
+        
+        <div class="p-4 border-t bg-slate-50 text-center">
+            <div class="text-[10px] font-black text-slate-400" id="total-rows-info">
+                読み込み待ち...
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
+        <!-- Top KPI Bar -->
+        <header class="h-20 bg-white border-b px-8 flex items-center justify-between shadow-sm z-0">
+            <div>
+                <h2 class="text-lg font-black text-slate-800" id="current-view-title">全社売上状況</h2>
+                <p class="text-[10px] text-slate-400 font-bold">アンピボット＆マスタ結合後のクリーンデータによるリアルタイム集計</p>
+            </div>
+            <div class="flex gap-8 text-right">
+                <div>
+                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">合計売上金額</div>
+                    <div class="text-2xl font-black text-indigo-600" id="kpi-total">¥0</div>
+                </div>
+                <!-- Future metrics here -->
+            </div>
+        </header>
+
+        <!-- Charts Area -->
+        <div class="flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+            
+            <div class="flex gap-6 h-80">
+                <!-- Chart 1: Sales by Block -->
+                <div class="glass-panel p-6 rounded-3xl flex-1 flex flex-col relative">
+                    <h3 class="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-indigo-500"></i>ブロック別売上比率
+                    </h3>
+                    <div class="flex-1 relative">
+                        <canvas id="chart-blocks"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Top Customers -->
+                <div class="glass-panel p-6 rounded-3xl flex-1 flex flex-col relative">
+                    <h3 class="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>上位お客様ランキング (TOP 10)
+                    </h3>
+                    <div class="flex-1 relative">
+                        <canvas id="chart-customers"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Area: Breakdown by Tree Code -->
+            <div class="glass-panel p-6 rounded-3xl flex-1 flex flex-col min-h-[300px]">
+                <h3 class="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
+                    <i data-lucide="list-tree" class="w-4 h-4 text-rose-500"></i>販売ツリーコード別 詳細内訳
+                </h3>
+                <div class="overflow-x-auto border rounded-xl flex-1">
+                    <table class="w-full text-xs box-border">
+                        <thead class="bg-slate-100 text-left sticky top-0 z-10">
+                            <tr>
+                                <th class="p-3 font-black text-slate-600">Zサマリー</th>
+                                <th class="p-3 font-black text-slate-600">販売ツリーコード</th>
+                                <th class="p-3 font-black text-slate-600 text-right">件数(明細数)</th>
+                                <th class="p-3 font-black text-slate-600 text-right">売上金額</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-treecodes" class="divide-y divide-slate-100 bg-white">
+                            <!-- JS will populate -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // 状態管理
+        let state = {
+            summaryFilter: null,
+            blockFilter: null,
+            data: []
+        };
+        
+        let charts = {};
+
+        // アプリ初期化
+        function init() {
+            if (typeof EXCEL_DATA === 'undefined') {
+                document.getElementById('total-rows-info').innerHTML = `
+                    <span class="text-rose-500 font-bold">データ未読み込み</span><br>
+                    先にPythonでパイプラインを実行して<br>dashboard_data.jsを生成してください。`;
+                return;
+            }
+            
+            // クレンジング済みデータを丸ごとメモリに格納
+            state.data = EXCEL_DATA;
+            document.getElementById('total-rows-info').innerHTML = `
+                <span class="text-indigo-500 font-black">${state.data.length.toLocaleString()}</span> 行のクリーンデータ
+            `;
+
+            buildFilters();
+            updateDashboard();
+        }
+
+        // フィルターUIの構築
+        function buildFilters() {
+            // Zサマリーの抽出と一意化
+            const summaries = [...new Set(state.data.map(d => d['共販サマリーコード'] || '未分類'))].sort();
+            renderFilterList('filter-summary', summaries, 'summaryFilter');
+
+            // ブロック名の抽出と一意化
+            const blocks = [...new Set(state.data.map(d => d['ブロック名'] || '未分類'))].sort();
+            renderFilterList('filter-block', blocks, 'blockFilter');
+        }
+
+        function renderFilterList(containerId, items, stateKey) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            items.forEach(item => {
+                // 件数カウント
+                const count = state.data.filter(d => {
+                    const val = stateKey === 'summaryFilter' ? (d['共販サマリーコード']||'未分類') : (d['ブロック名']||'未分類');
+                    return val === item;
+                }).length;
+
+                const btn = document.createElement('button');
+                const isSelected = state[stateKey] === item;
+                
+                btn.className = `w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex justify-between items-center ${
+                    isSelected ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                }`;
+                
+                btn.innerHTML = `
+                    <span class="truncate pr-2">${item}</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}">${count}</span>
+                `;
+                
+                btn.onclick = () => {
+                    state[stateKey] = state[stateKey] === item ? null : item;
+                    buildFilters(); // Re-render to update highlights
+                    updateDashboard();
+                };
+                
+                container.appendChild(btn);
+            });
+        }
+
+        function clearFilter(type) {
+            if (type === 'summary') state.summaryFilter = null;
+            if (type === 'block') state.blockFilter = null;
+            buildFilters();
+            updateDashboard();
+        }
+
+        // メイン分析エンジンの実行
+        function updateDashboard() {
+            // 1. データのフィルタリング
+            let filtered = state.data;
+            if (state.summaryFilter) filtered = filtered.filter(d => (d['共販サマリーコード']||'未分類') === state.summaryFilter);
+            if (state.blockFilter) filtered = filtered.filter(d => (d['ブロック名']||'未分類') === state.blockFilter);
+
+            // 見出しの更新
+            let title = "全社売上状況";
+            if (state.blockFilter) title = state.blockFilter;
+            if (state.summaryFilter) title += ` (サマリー: ${state.summaryFilter})`;
+            document.getElementById('current-view-title').textContent = title;
+
+            // KPIの計算
+            const totalSales = filtered.reduce((sum, row) => sum + (Number(row['売上金額']) || 0), 0);
+            document.getElementById('kpi-total').textContent = '¥' + totalSales.toLocaleString();
+
+            // グラフの更新
+            drawBlockChart(filtered);
+            drawCustomerChart(filtered);
+            drawTreeTable(filtered);
+        }
+
+        // 円グラフ: ブロック別
+        function drawBlockChart(data) {
+            // データの集計
+            const aggregated = {};
+            data.forEach(d => {
+                const b = d['ブロック名'] || '未分類';
+                aggregated[b] = (aggregated[b] || 0) + (Number(d['売上金額']) || 0);
+            });
+            
+            const labels = Object.keys(aggregated);
+            const values = Object.values(aggregated);
+
+            const ctx = document.getElementById('chart-blocks').getContext('2d');
+            if (charts.blocks) charts.blocks.destroy();
+            
+            charts.blocks = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#ec4899', '#14b8a6'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // 棒グラフ: お客様ランキング
+        function drawCustomerChart(data) {
+            const aggregated = {};
+            data.forEach(d => {
+                const c = d['お客様サマリ名'] || d['お客様名'] || '不明';
+                aggregated[c] = (aggregated[c] || 0) + (Number(d['売上金額']) || 0);
+            });
+            
+            // ソートして上位10件を取得
+            const sorted = Object.entries(aggregated).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            const labels = sorted.map(i => i[0].length > 10 ? i[0].substring(0, 10) + '...' : i[0]);
+            const values = sorted.map(i => i[1]);
+
+            const ctx = document.getElementById('chart-customers').getContext('2d');
+            if (charts.customers) charts.customers.destroy();
+            
+            charts.customers = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '売上金額',
+                        data: values,
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { callback: v => v.toLocaleString() } },
+                        y: { ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // テーブル: ツリーコード詳細
+        function drawTreeTable(data) {
+            const aggregated = {};
+            data.forEach(d => {
+                const z = d['共販サマリーコード'] || '未分類';
+                const t = d['販売ツリーコード'] || '不明';
+                const key = `${z}_${t}`;
+                
+                if (!aggregated[key]) {
+                    aggregated[key] = { z, t, count: 0, sum: 0 };
+                }
+                aggregated[key].count += 1;
+                aggregated[key].sum += (Number(d['売上金額']) || 0);
+            });
+
+            // 金額降順でソート
+            const sorted = Object.values(aggregated).sort((a, b) => b.sum - a.sum);
+            
+            const tbody = document.getElementById('table-treecodes');
+            tbody.innerHTML = '';
+            
+            sorted.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-700 font-bold">${item.z}</td>
+                    <td class="p-3 text-indigo-600 font-mono">${item.t}</td>
+                    <td class="p-3 text-right text-slate-500">${item.count.toLocaleString()}</td>
+                    <td class="p-3 text-right font-black text-slate-700">¥${item.sum.toLocaleString()}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ページ読み込み時に初期化
+        window.onload = init;
+    </script>
+</body>
+</html>

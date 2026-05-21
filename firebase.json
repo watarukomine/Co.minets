@@ -1,0 +1,25 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "rpa_extractor.py",
+      "process_data.py",
+      "downloads/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/異常値分析ダッシュボード.html"
+      }
+    ]
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

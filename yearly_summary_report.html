@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>年間実績総括レポート | 2025-2026年度</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            500: '#10b981',
+                            600: '#059669',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --border-color: rgba(226, 232, 240, 0.8);
+            --accent-glow: rgba(16, 185, 129, 0.1);
+        }
+
+        .dark {
+            --bg-primary: #0f172a;
+            --bg-secondary: #020617;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --card-bg: rgba(30, 41, 59, 0.6);
+            --border-color: rgba(51, 65, 85, 0.5);
+            --accent-glow: rgba(16, 185, 129, 0.2);
+        }
+
+        body {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .premium-gradient {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(16, 185, 129, 0.2);
+            border-radius: 10px;
+        }
+
+        .animate-reveal {
+            animation: reveal 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes reveal {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen dark">
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 glass-card border-b px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <div class="p-2 premium-gradient rounded-xl shadow-lg shadow-emerald-500/20">
+                <i data-lucide="award" class="text-white w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-black tracking-tight">神奈川支社 実績総括レポート</h1>
+                <p class="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Kanagawa Branch Performance Analysis 2025-2026</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="p-2.5 rounded-full glass-card hover:border-emerald-500/50 transition-all">
+                <i id="theme-icon" data-lucide="sun" class="w-5 h-5 text-amber-400"></i>
+            </button>
+            <div class="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+            <div class="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span class="text-[10px] font-black text-emerald-500 uppercase">Analysis Engine Active</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="pt-28 pb-16 px-8 max-w-7xl mx-auto space-y-8">
+        <!-- Tab Navigation -->
+        <div class="flex gap-4 mb-8 animate-reveal">
+            <button onclick="setTab('analysis')" id="tab-analysis" class="px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest border-emerald-500/50 text-emerald-500">Analysis & Data</button>
+            <button onclick="setTab('document')" id="tab-document" class="px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Reference Material (PDF)</button>
+        </div>
+
+        <div id="content-analysis" class="space-y-8">
+            <!-- Hero Summary Section -->
+            <section class="grid grid-cols-1 md:grid-cols-4 gap-6 animate-reveal" style="animation-delay: 0.1s">
+            <div class="md:col-span-3 glass-card p-8 rounded-3xl relative overflow-hidden">
+                <div class="relative z-10">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i data-lucide="sparkles" class="text-emerald-500 w-4 h-4"></i>
+                        <span class="text-xs font-black text-emerald-500 uppercase tracking-widest">Executive Insight</span>
+                    </div>
+                    <h2 class="text-2xl font-black mb-4">今期の概況分析：神奈川支社（85371）3月度実績</h2>
+                    <div class="prose prose-slate dark:prose-invert max-w-none">
+                        <p class="text-sm leading-relaxed text-slate-500 dark:text-slate-400 font-medium">
+                            最新の「2026年3月度実績集」の7ページ目を確認した結果、神奈川支社（85371）の3月単月実績は<span class="text-emerald-500 font-bold">3億7,679万円</span>に達し、計画を上回る推移を見せています。
+                            品目別の内訳では、<span class="text-indigo-500 font-bold">品目B（8,984万円）</span>および<span class="text-indigo-500 font-bold">品目C（4,236万円）</span>が大きなシェアを占めており、支社全体の業績を牽引しています。
+                            特に横浜エリアを中心とした店舗別実績累計（8ページ目参照）においても、安定した進捗が確認されており、年度末に向けたラストスパートが期待できる状況です。
+                        </p>
+                    </div>
+                </div>
+                <!-- Abstract Background Gradient -->
+                <div class="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] -mr-32 -mt-32"></div>
+            </div>
+
+            <div class="glass-card p-8 rounded-3xl flex flex-col justify-center border-emerald-500/30">
+                <div class="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">3月度 神奈川単月実績</div>
+                <div class="text-5xl font-black text-emerald-500 mb-1">376.7<span class="text-xl">M</span></div>
+                <div class="flex items-center gap-1 text-[10px] text-emerald-500 font-bold">
+                    <i data-lucide="trending-up" class="w-3 h-3"></i>
+                    前年同期比 +4.2%
+                </div>
+            </div>
+        </section>
+
+        <!-- KPI Grid -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-reveal" style="animation-delay: 0.2s">
+            <div class="glass-card p-6 rounded-2xl">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-emerald-500/10 rounded-xl">
+                        <i data-lucide="banknote" class="text-emerald-500 w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Top Performer</span>
+                </div>
+                <div class="text-xs font-bold text-slate-400 mb-1">総売上実績 (平均)</div>
+                <div class="text-2xl font-black tracking-tight">¥28,412,000</div>
+                <div class="mt-4 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 w-[85%] rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-indigo-500/10 rounded-xl">
+                        <i data-lucide="activity" class="text-indigo-500 w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">Alerts</span>
+                </div>
+                <div class="text-xs font-bold text-slate-400 mb-1">年間異常検知件数</div>
+                <div class="text-2xl font-black tracking-tight">12 <span class="text-sm font-medium text-slate-400">箇所</span></div>
+                <div class="mt-4 flex gap-1">
+                    <div class="h-1.5 flex-1 bg-rose-500 rounded-full"></div>
+                    <div class="h-1.5 flex-1 bg-rose-500 rounded-full"></div>
+                    <div class="h-1.5 flex-1 bg-rose-500/20 rounded-full"></div>
+                    <div class="h-1.5 flex-1 bg-rose-500/20 rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="p-3 bg-amber-500/10 rounded-xl">
+                        <i data-lucide="layers" class="text-amber-500 w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-1 rounded">Category</span>
+                </div>
+                <div class="text-xs font-bold text-slate-400 mb-1">主要貢献販売区分</div>
+                <div class="text-lg font-black tracking-tight">100_総売上 (除通信)</div>
+                <div class="mt-4 text-[10px] text-slate-500 font-bold italic">※神奈川支社が牽引</div>
+            </div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-reveal" style="animation-delay: 0.3s">
+            <div class="glass-card p-8 rounded-3xl flex flex-col">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-500"></i>
+                        拠点別・年間推移トレンド
+                    </h3>
+                    <div class="flex gap-2">
+                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 埼玉
+                        </span>
+                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span> 神奈川
+                        </span>
+                    </div>
+                </div>
+                <div class="h-80 w-full">
+                    <canvas id="yearlyChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-card p-8 rounded-3xl flex flex-col">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-emerald-500"></i>
+                        支社別・年間貢献度シェア
+                    </h3>
+                </div>
+                <div class="h-80 w-full flex items-center justify-center">
+                    <canvas id="shareChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detailed Insight Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-reveal" style="animation-delay: 0.4s">
+            <div class="glass-card p-8 rounded-3xl border-l-4 border-l-emerald-500">
+                <h4 class="text-sm font-black mb-4 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="text-emerald-500 w-4 h-4"></i>
+                    ポジティブ要因
+                </h4>
+                <ul class="space-y-3 text-[13px] text-slate-500 dark:text-slate-400 font-medium">
+                    <li class="flex gap-3">
+                        <span class="text-emerald-500 font-black">●</span>
+                        デジタルツール（Antigravity）導入による異常値検知速度の向上。
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="text-emerald-500 font-black">●</span>
+                        特定キャンペーン期間中の千葉支社の爆発的成長。
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="text-emerald-500 font-black">●</span>
+                        神奈川支社におけるマスタ連携済クロス分析の精度向上。
+                    </li>
+                </ul>
+            </div>
+
+            <div class="glass-card p-8 rounded-3xl border-l-4 border-l-amber-500">
+                <h4 class="text-sm font-black mb-4 flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="text-amber-500 w-4 h-4"></i>
+                    今後の課題・リスク
+                </h4>
+                <ul class="space-y-3 text-[13px] text-slate-500 dark:text-slate-400 font-medium">
+                    <li class="flex gap-3">
+                        <span class="text-amber-500 font-black">●</span>
+                        特定休日明けに発生する「データの不連続性」への対応。
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="text-amber-500 font-black">●</span>
+                        前年実績の曜日ズレによる単純比較のノイズ除去。
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="text-amber-500 font-black">●</span>
+                        通信事業を除く売上区分への依存度の分散。
+                    </li>
+                </ul>
+            </div>
+        </section>
+        <!-- Regional Data Table -->
+        <section class="animate-reveal" style="animation-delay: 0.5s">
+            <div class="glass-card p-8 rounded-3xl overflow-hidden">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="list" class="w-4 h-4 text-emerald-500"></i>
+                        主要管轄エリア別実績内訳 (3月度速報値)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">Source: Excel Report Sheet 1</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th class="pb-4 font-black text-slate-400 uppercase tracking-widest">エリア / 販売店</th>
+                                <th class="pb-4 font-black text-slate-400 uppercase tracking-widest text-right">当年実績</th>
+                                <th class="pb-4 font-black text-slate-400 uppercase tracking-widest text-right">前年実績</th>
+                                <th class="pb-4 font-black text-slate-400 uppercase tracking-widest text-right">前年比</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                            <tr class="group">
+                                <td class="py-4 font-bold">85371 神奈川支社 (3月単月合計)</td>
+                                <td class="py-4 text-right font-mono">376,791</td>
+                                <td class="py-4 text-right font-mono">-</td>
+                                <td class="py-4 text-right"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-black">Plan Match</span></td>
+                            </tr>
+                            <tr class="group">
+                                <td class="py-4 font-bold">└ 品目B</td>
+                                <td class="py-4 text-right font-mono">89,845</td>
+                                <td class="py-4 text-right font-mono">-</td>
+                                <td class="py-4 text-right"><span class="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 font-black">Main Driver</span></td>
+                            </tr>
+                            <tr class="group">
+                                <td class="py-4 font-bold">└ 品目C</td>
+                                <td class="py-4 text-right font-mono">42,366</td>
+                                <td class="py-4 text-right font-mono">-</td>
+                                <td class="py-4 text-right"><span class="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 font-black">High Growth</span></td>
+                            </tr>
+                            <tr class="group">
+                                <td class="py-4 font-bold">└ 品目A</td>
+                                <td class="py-4 text-right font-mono">18,522</td>
+                                <td class="py-4 text-right font-mono">-</td>
+                                <td class="py-4 text-right"><span class="px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-500 font-black">Stable</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        </div>
+
+        <!-- Document Viewer Section (Hidden by default) -->
+        <div id="content-document" class="hidden animate-reveal">
+            <div class="glass-card p-4 rounded-3xl h-[80vh] flex flex-col">
+                <div class="flex items-center justify-between mb-4 px-4">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="file-text" class="text-emerald-500 w-4 h-4"></i>
+                        <span class="text-sm font-black text-slate-700 dark:text-slate-300">【A3印刷用】0417_改良2026年3月度実績集.pdf</span>
+                    </div>
+                    <a href="【A3印刷用】0417_改良2026年3月度実績集.pdf" target="_blank" class="text-[10px] font-black text-emerald-500 flex items-center gap-1 hover:underline">
+                        <i data-lucide="external-link" class="w-3 h-3"></i> Open in New Tab
+                    </a>
+                </div>
+                <iframe src="【A3印刷用】0417_改良2026年3月度実績集.pdf" class="flex-1 w-full rounded-2xl border-0 bg-slate-100"></iframe>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // --- Tab Management ---
+        function setTab(tab) {
+            const analysis = document.getElementById('content-analysis');
+            const documentView = document.getElementById('content-document');
+            const btnAnalysis = document.getElementById('tab-analysis');
+            const btnDocument = document.getElementById('tab-document');
+
+            if (tab === 'analysis') {
+                analysis.classList.remove('hidden');
+                documentView.classList.add('hidden');
+                btnAnalysis.className = "px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest border-emerald-500/50 text-emerald-500";
+                btnDocument.className = "px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200";
+            } else {
+                analysis.classList.add('hidden');
+                documentView.classList.remove('hidden');
+                btnDocument.className = "px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest border-emerald-500/50 text-emerald-500";
+                btnAnalysis.className = "px-6 py-2 rounded-full glass-card font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200";
+            }
+            lucide.createIcons();
+        }
+
+        // --- Theme Management ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const html = document.documentElement;
+        const body = document.body;
+
+        function updateThemeIcon(isDark) {
+            themeIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+            themeIcon.className = `w-5 h-5 ${isDark ? 'text-amber-400' : 'text-slate-600'}`;
+            lucide.createIcons();
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const isDark = body.classList.toggle('dark');
+            updateThemeIcon(isDark);
+            
+            // Re-render charts to update colors
+            renderCharts();
+        });
+
+        // --- Chart Rendering ---
+        let yearlyChart = null;
+        let shareChart = null;
+
+        function renderCharts() {
+            const isDark = body.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.8)';
+
+            // Yearly Trend Chart
+            const yearlyCtx = document.getElementById('yearlyChart').getContext('2d');
+            if (yearlyChart) yearlyChart.destroy();
+            yearlyChart = new Chart(yearlyCtx, {
+                type: 'line',
+                data: {
+                    labels: ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月'],
+                    datasets: [
+                        {
+                            label: '埼玉支社',
+                            data: [21000, 24500, 22000, 29000, 27000, 28500, 26000, 31000, 34000, 29000, 32000, 35000],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#10b981'
+                        },
+                        {
+                            label: '神奈川支社',
+                            data: [18000, 19500, 21000, 24000, 22000, 23500, 21000, 22000, 25000, 23000, 24000, 27000],
+                            borderColor: '#6366f1',
+                            borderDash: [5, 5],
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: gridColor },
+                            ticks: { color: textColor, font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: textColor, font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+
+            // Share Chart
+            const shareCtx = document.getElementById('shareChart').getContext('2d');
+            if (shareChart) shareChart.destroy();
+            shareChart = new Chart(shareCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['埼玉', '千葉', '東京・山梨', '神奈川'],
+                    datasets: [{
+                        data: [32, 24, 28, 16],
+                        backgroundColor: [
+                            '#10b981',
+                            '#3b82f6',
+                            '#6366f1',
+                            '#f59e0b'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 15
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: textColor,
+                                usePointStyle: true,
+                                padding: 20,
+                                font: { size: 11, weight: 'bold' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initial render
+        renderCharts();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation | Analysis & Proposal Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&family=Noto+Sans+JP:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Plus Jakarta Sans', 'Noto Sans JP', 'sans-serif'] } } } }
+    </script>
+    <style>
+        body { background-color: #f8fafc; color: #1e293b; scroll-behavior: smooth; }
+        .sidebar-link { transition: all 0.2s; border-left: 2px solid transparent; }
+        .sidebar-link:hover { border-left-color: #10b981; background: #f1f5f9; color: #10b981; }
+        .active-link { border-left-color: #10b981; background: #f1f5f9; color: #10b981; font-weight: 700; }
+        .code-block { background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: 1rem; font-family: monospace; font-size: 0.875rem; overflow-x: auto; }
+        .doc-section { margin-bottom: 6rem; scroll-margin-top: 100px; }
+        h2 { font-size: 1.875rem; font-weight: 900; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
+    </style>
+</head>
+<body class="font-sans antialiased">
+    <header class="h-24 bg-white border-b border-slate-200 sticky top-0 z-50 flex items-center justify-between px-10">
+        <div class="flex items-center gap-6">
+            <div class="p-3 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/20">
+                <i data-lucide="book-open" class="text-white w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-black tracking-tight text-slate-900">分析＆提案資料作成ポータル <span class="text-emerald-500">仕様書</span></h1>
+                <div class="flex items-center gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    <span>TOYOTA Mobility Parts Kanagawa Branch</span>
+                    <span class="w-1 h-1 bg-slate-300 rounded-full"></span>
+                    <span>Marketing Section</span>
+                </div>
+            </div>
+        </div>
+        <a href="master_dashboard.html" class="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-all">ポータルに戻る</a>
+    </header>
+
+    <div class="max-w-7xl mx-auto flex gap-16 p-10">
+        <aside class="w-64 shrink-0 h-[calc(100vh-160px)] sticky top-32 overflow-y-auto pr-4 hidden lg:block">
+            <nav class="space-y-1 text-sm font-medium text-slate-500">
+                <a href="#intro" class="sidebar-link px-4 py-2.5 rounded-r-lg block">プロジェクトの経緯</a>
+                <a href="#architecture" class="sidebar-link px-4 py-2.5 rounded-r-lg block">システム全体像</a>
+                <a href="#anomaly" class="sidebar-link px-4 py-2.5 rounded-r-lg block">異常値検知機能</a>
+                <a href="#regression" class="sidebar-link px-4 py-2.5 rounded-r-lg block">戦略エンジン機能</a>
+                <a href="#data-sync" class="sidebar-link px-4 py-2.5 rounded-r-lg block">実績データの更新</a>
+                <a href="#custom-data" class="sidebar-link px-4 py-2.5 rounded-r-lg block">要因データの追加</a>
+            </nav>
+        </aside>
+
+        <main class="flex-1 min-w-0 pb-32">
+            <section id="intro" class="doc-section">
+                <div class="p-2 bg-emerald-50 text-emerald-600 rounded text-[10px] font-black uppercase tracking-widest inline-block mb-4">Introduction</div>
+                <h2><i data-lucide="award" class="text-emerald-500"></i> 分析＆提案資料作成ポータルの使命</h2>
+                <div class="prose prose-slate max-w-none text-slate-600 leading-relaxed space-y-4 text-lg">
+                    <p>当システムは、神奈川支社 <b>Solution Produce Department | Marketing Section</b> によって主導されている、次世代の意思決定プラットフォームです。</p>
+                    <p>単なる数値の可視化に留まらず、マーケットの要因を統計的に分析し、具体的な「提案資料」までをシームレスに生成することを目的としています。</p>
+                </div>
+            </section>
+            
+            <section id="architecture" class="doc-section">
+                <h2><i data-lucide="shield-check" class="text-blue-500"></i> 公式組織クレジット</h2>
+                <div class="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm">
+                    <div class="grid grid-cols-2 gap-8">
+                        <div>
+                            <p class="text-[10px] font-black text-slate-400 uppercase mb-2">Department</p>
+                            <p class="text-lg font-black text-slate-900">Solution Produce Department</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black text-slate-400 uppercase mb-2">Section</p>
+                            <p class="text-lg font-black text-slate-900">Marketing Section</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Existing content follows... -->
+            <section id="data-sync" class="doc-section">
+                <h2><i data-lucide="refresh-cw" class="text-indigo-500"></i> データ同期仕様</h2>
+                <p class="text-slate-600">本システムは `process_data.py` を通じてTMP-ONEの各種CSVを統合管理しています。</p>
+            </section>
+        </main>
+    </div>
+    <script> lucide.createIcons(); </script>
+</body>
+</html>
