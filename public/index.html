@@ -1412,16 +1412,26 @@
                 dataMap[b]["その他"] = Math.max(0, other);
             });
             
+            // Sort categories by Kanagawa Branch value (or fallback to sum of selected branches if Kanagawa is not selected) in descending order.
+            // In Chart.js stacked bar chart, the dataset pushed first (index 0) is drawn at the bottom.
+            // Descending order (largest first) ensures that the category with the largest value is drawn at the bottom.
+            const sortedCategories = [...categories].sort((a, b) => {
+                const valA = dataMap["神奈川支社"] ? (dataMap["神奈川支社"][a] || 0) : branches.reduce((sum, br) => sum + (dataMap[br][a] || 0), 0);
+                const valB = dataMap["神奈川支社"] ? (dataMap["神奈川支社"][b] || 0) : branches.reduce((sum, br) => sum + (dataMap[br][b] || 0), 0);
+                return valB - valA;
+            });
+
             const labels = branches;
             const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16'];
             
             const datasets = [];
-            categories.forEach((cat, idx) => {
+            sortedCategories.forEach((cat) => {
+                const origIdx = categories.indexOf(cat);
                 datasets.push({
                     type: 'bar',
                     label: translateCategory(cat),
                     data: branches.map(b => dataMap[b][cat] / selection.unit),
-                    backgroundColor: colors[idx % colors.length],
+                    backgroundColor: colors[origIdx % colors.length],
                     borderColor: 'white',
                     borderWidth: 1
                 });
@@ -1446,8 +1456,8 @@
             });
             
             renderBreakdownChart(labels, datasets);
-            renderBreakdownTable(branches, categories, dataMap);
-            updateBreakdownAI(branches, categories, dataMap);
+            renderBreakdownTable(branches, sortedCategories, dataMap);
+            updateBreakdownAI(branches, sortedCategories, dataMap);
         }
 
         function renderBreakdownChart(labels, datasets) {
@@ -1466,7 +1476,25 @@
                         }
                     },
                     scales: {
-                        x: { stacked: true, ticks: { font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } } },
+                        x: { 
+                            stacked: true, 
+                            ticks: { 
+                                font: function(context) {
+                                    const label = context.chart.data.labels[context.index];
+                                    if (label === "神奈川支社") {
+                                        return { size: 13, weight: '900', family: "'Outfit', 'Noto Sans JP', sans-serif" };
+                                    }
+                                    return { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" };
+                                },
+                                color: function(context) {
+                                    const label = context.chart.data.labels[context.index];
+                                    if (label === "神奈川支社") {
+                                        return '#059669'; // Bold Emerald
+                                    }
+                                    return '#64748b'; // Slate-500
+                                }
+                            } 
+                        },
                         y: { 
                             stacked: true, 
                             title: {
@@ -1484,7 +1512,6 @@
                     afterDatasetsDraw(chart) {
                         const { ctx } = chart;
                         ctx.save();
-                        ctx.font = '900 11px "Outfit", "Noto Sans JP", sans-serif';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         
@@ -1501,11 +1528,15 @@
                                     // Only draw label if the segment is tall enough
                                     const segmentHeight = Math.abs(element.y - element.base);
                                     if (segmentHeight > 16) {
+                                        const label = chart.data.labels[index];
+                                        const isKanagawa = label === "神奈川支社";
+                                        
+                                        ctx.font = isKanagawa ? '900 13px "Outfit", "Noto Sans JP", sans-serif' : '900 11px "Outfit", "Noto Sans JP", sans-serif';
                                         const formattedVal = val.toLocaleString(undefined, { maximumFractionDigits: 1 });
                                         
                                         // Draw thick dark outline for readability
-                                        ctx.strokeStyle = 'rgba(15, 23, 42, 0.75)';
-                                        ctx.lineWidth = 3;
+                                        ctx.strokeStyle = isKanagawa ? 'rgba(5, 150, 105, 0.95)' : 'rgba(15, 23, 42, 0.75)'; // Emerald outline for Kanagawa
+                                        ctx.lineWidth = isKanagawa ? 4 : 3;
                                         ctx.lineJoin = 'round';
                                         ctx.strokeText(formattedVal, x, y);
                                         
@@ -1541,6 +1572,7 @@
             categories.forEach(cat => totalRow[cat] = 0);
             
             let bodyHtml = branches.map(br => {
+                const isKanagawa = br === "神奈川支社";
                 const total = dataMap[br].total / selection.unit;
                 const specifiedSum = (dataMap[br].specifiedSum || 0) / selection.unit;
                 
@@ -1550,14 +1582,31 @@
                 const catCells = categories.map(cat => {
                     const val = dataMap[br][cat] / selection.unit;
                     totalRow[cat] += val;
-                    return `<td class='p-4 text-right'>${val === 0 ? '-' : val.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>`;
+                    const cellClass = isKanagawa ? "p-4 text-right font-black text-slate-900" : "p-4 text-right";
+                    return `<td class='${cellClass}'>${val === 0 ? '-' : val.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>`;
                 }).join('');
                 
-                return `<tr class='border-b border-slate-50 hover:bg-slate-50/50'>
-                    <td class='p-4 font-black text-slate-800'>${br}</td>
-                    <td class='p-4 text-right font-black bg-slate-50 text-slate-700'>${total === 0 ? '-' : total.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>
+                const rowClass = isKanagawa 
+                    ? "border-b border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50/50 transition-all" 
+                    : "border-b border-slate-50 hover:bg-slate-50/50 transition-all";
+                
+                const nameCell = isKanagawa
+                    ? `<td class='p-4 font-black text-emerald-700'><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>${br}</div></td>`
+                    : `<td class='p-4 font-black text-slate-800'>${br}</td>`;
+                
+                const totalCellClass = isKanagawa
+                    ? "p-4 text-right font-black bg-emerald-100/30 text-slate-900"
+                    : "p-4 text-right font-black bg-slate-50 text-slate-700";
+                    
+                const specifiedSumCellClass = isKanagawa
+                    ? "p-4 text-right font-black bg-emerald-100/40 text-emerald-950"
+                    : "p-4 text-right font-black bg-emerald-50/30 text-emerald-900";
+                
+                return `<tr class='${rowClass}'>
+                    ${nameCell}
+                    <td class='${totalCellClass}'>${total === 0 ? '-' : total.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>
                     ${catCells}
-                    ${showSpecifiedTotal ? `<td class='p-4 text-right font-black bg-emerald-50/30 text-emerald-900'>${specifiedSum === 0 ? '-' : specifiedSum.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>` : ''}
+                    ${showSpecifiedTotal ? `<td class='${specifiedSumCellClass}'>${specifiedSum === 0 ? '-' : specifiedSum.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>` : ''}
                 </tr>`;
             }).join('');
             
