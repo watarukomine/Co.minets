@@ -1545,22 +1545,27 @@
                 });
             });
 
-            // Push the last year's specified total line chart dataset
-            datasets.push({
-                type: 'line',
-                label: '前年実績 (選択合計)',
-                data: branches.map(b => dataMap[b].p_specifiedSum / selection.unit),
-                borderColor: '#64748b', // Cool gray
-                backgroundColor: 'rgba(100, 116, 139, 0.1)',
-                borderWidth: 3,
-                tension: 0.3,
-                fill: false,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#64748b',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                order: -1
+            // Push last year's line chart dataset for each category to match the bars
+            sortedCategories.forEach((cat) => {
+                const origIdx = categories.indexOf(cat);
+                const color = colors[origIdx % colors.length];
+                datasets.push({
+                    type: 'line',
+                    label: translateCategory(cat) + ' (前年)',
+                    data: branches.map(b => dataMap[b]["p_" + cat] / selection.unit),
+                    borderColor: color,
+                    backgroundColor: 'rgba(255, 255, 255, 0)',
+                    borderWidth: 2.5,
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 4.5,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1.5,
+                    order: -1
+                });
             });
             
             renderBreakdownChart(labels, datasets);
