@@ -100,7 +100,10 @@
                     </select>
                     <select id="displayModeSelect" onchange="onDisplayModeChange()" class="w-full p-3 bg-primary text-white border border-primary-100 rounded-xl font-black outline-none cursor-pointer text-sm shadow-lg shadow-primary/20">
                         <option value="aggregated">合算グラフ表示</option>
-                        <option value="detailed">個別グラフ表示（内訳）</option>
+                        <option value="detailed">個別グラフ表示（全内訳）</option>
+                        <option value="by_branch">支社別グラフ表示</option>
+                        <option value="by_route">ルート別グラフ表示</option>
+                        <option value="by_category">販売区分別グラフ表示</option>
                     </select>
                     <select id="unitSelect" onchange="onUnitChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none cursor-pointer text-sm">
                         <option value="0.001">表示単位: 円</option>
@@ -873,42 +876,93 @@
             const tableDatasets = [];
             
             const customLegend = document.getElementById('chart-legend');
-            if (customLegend) customLegend.style.display = selection.displayMode === 'detailed' ? 'none' : 'flex';
+            if (customLegend) customLegend.style.display = selection.displayMode !== 'aggregated' ? 'none' : 'flex';
 
             if (dat) {
                 const cAgg = aggregate(sliced, dat.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
                 const pAgg = aggregate(sliced, dat.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
                 
+                const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#eab308'];
+
                 if (selection.displayMode === 'aggregated') {
                     datasets.push({ label: '当年 (合算)', data: cAgg, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.05)', fill: true, tension: 0.4, borderWidth: 3 });
                     datasets.push({ label: '前年 (合算)', data: pAgg, borderColor: '#cbd5e1', borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 2 });
-                }
-
-                const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#eab308'];
-
-                for(let i=0; i<dat.details.length; i++) {
-                    const d = dat.details[i];
-                    const detailCAgg = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
-                    const detailPAgg = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
                     
-                    const hasC = detailCAgg.some(v => v !== 0);
-                    const hasP = detailPAgg.some(v => v !== 0);
-                    
-                    if (hasC || hasP) {
-                        const translatedLabel = translateLabel(d.label);
-                        if (hasC) tableDatasets.push({ label: translatedLabel + " (当年)", data: detailCAgg, isTotal: false });
-                        if (hasP) tableDatasets.push({ label: translatedLabel + " (前年)", data: detailPAgg, isTotal: false });
-                        
-                        if (selection.displayMode === 'detailed') {
-                            const cColor = colors[i % colors.length];
-                            if (hasC) datasets.push({ label: translatedLabel + " (当年)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
-                            if (hasP) datasets.push({ label: translatedLabel + " (前年)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                    for(let i=0; i<dat.details.length; i++) {
+                        const d = dat.details[i];
+                        const detailCAgg = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailPAgg = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        const hasC = detailCAgg.some(v => v !== 0);
+                        const hasP = detailPAgg.some(v => v !== 0);
+                        if (hasC || hasP) {
+                            const translatedLabel = translateLabel(d.label);
+                            if (hasC) tableDatasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, isTotal: false });
+                            if (hasP) tableDatasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, isTotal: false });
                         }
                     }
+                } else if (selection.displayMode === 'detailed') {
+                    for(let i=0; i<dat.details.length; i++) {
+                        const d = dat.details[i];
+                        const detailCAgg = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailPAgg = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        const hasC = detailCAgg.some(v => v !== 0);
+                        const hasP = detailPAgg.some(v => v !== 0);
+                        if (hasC || hasP) {
+                            const translatedLabel = translateLabel(d.label);
+                            if (hasC) tableDatasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, isTotal: false });
+                            if (hasP) tableDatasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, isTotal: false });
+                            
+                            const cColor = colors[i % colors.length];
+                            if (hasC) datasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
+                            if (hasP) datasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                        }
+                    }
+                } else {
+                    const groups = {};
+                    dat.details.forEach(d => {
+                        let grpKey = d.branch;
+                        if (selection.displayMode === 'by_route') grpKey = d.route;
+                        else if (selection.displayMode === 'by_category') grpKey = d.category;
+                        
+                        if (!groups[grpKey]) {
+                            groups[grpKey] = { 
+                                c: Array(labels.length).fill(0), 
+                                p: Array(labels.length).fill(0) 
+                            };
+                        }
+                        const detailC = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailP = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                        for (let j = 0; j < detailC.length; j++) {
+                            groups[grpKey].c[j] += detailC[j];
+                            groups[grpKey].p[j] += detailP[j];
+                        }
+                    });
+                    
+                    const groupKeys = Object.keys(groups);
+                    groupKeys.forEach((key, idx) => {
+                        const grp = groups[key];
+                        const hasC = grp.c.some(v => v !== 0);
+                        const hasP = grp.p.some(v => v !== 0);
+                        if (hasC || hasP) {
+                            let labelText = key;
+                            if (selection.displayMode === 'by_route') labelText = translateRoute(key);
+                            else if (selection.displayMode === 'by_category') labelText = translateCategory(key);
+                            
+                            const color = colors[idx % colors.length];
+                            if (hasC) {
+                                datasets.push({ label: labelText + " (当期)", data: grp.c, borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4, borderWidth: 2 });
+                                tableDatasets.push({ label: labelText + " (当期)", data: grp.c, isTotal: false });
+                            }
+                            if (hasP) {
+                                datasets.push({ label: labelText + " (前期)", data: grp.p, borderColor: color, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                                tableDatasets.push({ label: labelText + " (前期)", data: grp.p, isTotal: false });
+                            }
+                        }
+                    });
                 }
                 
-                tableDatasets.push({ label: '【合算】当年', data: cAgg, isTotal: true });
-                tableDatasets.push({ label: '【合算】前年', data: pAgg, isTotal: true });
+                tableDatasets.push({ label: '【合算】当期', data: cAgg, isTotal: true });
+                tableDatasets.push({ label: '【合算】前期', data: pAgg, isTotal: true });
             }
             renderChart(labels, datasets); renderTable(labels, tableDatasets);
             if (dat) {
@@ -1080,7 +1134,7 @@
                             isTotal: true
                         });
                     });
-                } else {
+                } else if (selection.displayMode === 'detailed') {
                     selectedYears.forEach((y, yIdx) => {
                         dat.details.forEach((d, dIdx) => {
                             const detailYData = getYearData(y, d.c).map(v => v / selection.unit);
@@ -1092,6 +1146,60 @@
                                     label: label,
                                     data: detailYData,
                                     borderColor: colors[(yIdx * 3 + dIdx) % colors.length],
+                                    borderDash: borderDash,
+                                    fill: false,
+                                    tension: 0.4,
+                                    borderWidth: 2
+                                });
+                                tableDatasets.push({
+                                    label: label,
+                                    data: detailYData,
+                                    isTotal: false
+                                });
+                            }
+                        });
+                    });
+                    
+                    selectedYears.forEach((y, idx) => {
+                        const yData = getYearData(y, dat.c).map(v => v / selection.unit);
+                        tableDatasets.push({
+                            label: `【合算合計】${y}年度`,
+                            data: yData,
+                            isTotal: true
+                        });
+                    });
+                } else {
+                    const groups = {};
+                    dat.details.forEach(d => {
+                        let grpKey = d.branch;
+                        if (selection.displayMode === 'by_route') grpKey = d.route;
+                        else if (selection.displayMode === 'by_category') grpKey = d.category;
+                        
+                        if (!groups[grpKey]) {
+                            groups[grpKey] = { c: Array(dat.c.length).fill(0) };
+                        }
+                        for (let j = 0; j < d.c.length; j++) {
+                            groups[grpKey].c[j] += (d.c[j] || 0);
+                        }
+                    });
+                    
+                    const groupKeys = Object.keys(groups);
+                    selectedYears.forEach((y, yIdx) => {
+                        groupKeys.forEach((key, gIdx) => {
+                            const grp = groups[key];
+                            const detailYData = getYearData(y, grp.c).map(v => v / selection.unit);
+                            const hasData = detailYData.some(v => v !== 0);
+                            if (hasData) {
+                                let labelText = key;
+                                if (selection.displayMode === 'by_route') labelText = translateRoute(key);
+                                else if (selection.displayMode === 'by_category') labelText = translateCategory(key);
+                                
+                                const label = `${labelText} (${y}年度)`;
+                                const borderDash = yIdx > 0 ? [5, 5] : [];
+                                datasets.push({
+                                    label: label,
+                                    data: detailYData,
+                                    borderColor: colors[(yIdx * 3 + gIdx) % colors.length],
                                     borderDash: borderDash,
                                     fill: false,
                                     tension: 0.4,
@@ -1812,27 +1920,84 @@
                 datasets.push({ label: '期間A (' + labelTextA + ')', data: aAgg, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.05)', fill: true, tension: 0.4, borderWidth: 3 });
                 datasets.push({ label: '期間B (' + labelTextB + ')', data: bAgg, borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.05)', fill: true, tension: 0.4, borderWidth: 3, borderDash: [5,5] });
 
-                // Detail datasets for table (each combination)
+                // Detail datasets for table and chart
                 const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#eab308'];
-                for(let i=0; i<dat.details.length; i++) {
-                    const d = dat.details[i];
-                    const detailAAgg = aggregate(slicedA, d.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
-                    const detailBAgg = aggregate(slicedB, d.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
-                    while (detailAAgg.length < maxLen) detailAAgg.push(0);
-                    while (detailBAgg.length < maxLen) detailBAgg.push(0);
-                    const hasA = detailAAgg.some(v => v !== 0);
-                    const hasB = detailBAgg.some(v => v !== 0);
-                    if (hasA || hasB) {
-                        const labelText = translateLabel(d.label);
-                        if (hasA) tableDatasets.push({ label: labelText + ' (期間A)', data: detailAAgg, isTotal: false });
-                        if (hasB) tableDatasets.push({ label: labelText + ' (期間B)', data: detailBAgg, isTotal: false });
-
-                        if (selection.displayMode === 'detailed') {
+                
+                if (selection.displayMode === 'aggregated') {
+                    for(let i=0; i<dat.details.length; i++) {
+                        const d = dat.details[i];
+                        const detailAAgg = aggregate(slicedA, d.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailBAgg = aggregate(slicedB, d.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
+                        while (detailAAgg.length < maxLen) detailAAgg.push(0);
+                        while (detailBAgg.length < maxLen) detailBAgg.push(0);
+                        const hasA = detailAAgg.some(v => v !== 0);
+                        const hasB = detailBAgg.some(v => v !== 0);
+                        if (hasA || hasB) {
+                            const labelText = translateLabel(d.label);
+                            if (hasA) tableDatasets.push({ label: labelText + ' (期間A)', data: detailAAgg, isTotal: false });
+                            if (hasB) tableDatasets.push({ label: labelText + ' (期間B)', data: detailBAgg, isTotal: false });
+                        }
+                    }
+                } else if (selection.displayMode === 'detailed') {
+                    for(let i=0; i<dat.details.length; i++) {
+                        const d = dat.details[i];
+                        const detailAAgg = aggregate(slicedA, d.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailBAgg = aggregate(slicedB, d.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
+                        while (detailAAgg.length < maxLen) detailAAgg.push(0);
+                        while (detailBAgg.length < maxLen) detailBAgg.push(0);
+                        const hasA = detailAAgg.some(v => v !== 0);
+                        const hasB = detailBAgg.some(v => v !== 0);
+                        if (hasA || hasB) {
+                            const labelText = translateLabel(d.label);
+                            if (hasA) tableDatasets.push({ label: labelText + ' (期間A)', data: detailAAgg, isTotal: false });
+                            if (hasB) tableDatasets.push({ label: labelText + ' (期間B)', data: detailBAgg, isTotal: false });
+                            
                             const cColor = colors[i % colors.length];
                             if (hasA) datasets.push({ label: labelText + ' (期間A)', data: detailAAgg, borderColor: cColor, fill: false, tension: 0.4, borderWidth: 2 });
                             if (hasB) datasets.push({ label: labelText + ' (期間B)', data: detailBAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
                         }
                     }
+                } else {
+                    const groups = {};
+                    dat.details.forEach(d => {
+                        let grpKey = d.branch;
+                        if (selection.displayMode === 'by_route') grpKey = d.route;
+                        else if (selection.displayMode === 'by_category') grpKey = d.category;
+                        
+                        if (!groups[grpKey]) {
+                            groups[grpKey] = { c: Array(tl.length).fill(0) };
+                        }
+                        for (let j = 0; j < d.c.length; j++) {
+                            groups[grpKey].c[j] += (d.c[j] || 0);
+                        }
+                    });
+                    
+                    const groupKeys = Object.keys(groups);
+                    groupKeys.forEach((key, gIdx) => {
+                        const grp = groups[key];
+                        const detailAAgg = aggregate(slicedA, grp.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
+                        const detailBAgg = aggregate(slicedB, grp.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
+                        while (detailAAgg.length < maxLen) detailAAgg.push(0);
+                        while (detailBAgg.length < maxLen) detailBAgg.push(0);
+                        
+                        const hasA = detailAAgg.some(v => v !== 0);
+                        const hasB = detailBAgg.some(v => v !== 0);
+                        if (hasA || hasB) {
+                            let labelText = key;
+                            if (selection.displayMode === 'by_route') labelText = translateRoute(key);
+                            else if (selection.displayMode === 'by_category') labelText = translateCategory(key);
+                            
+                            const color = colors[gIdx % colors.length];
+                            if (hasA) {
+                                datasets.push({ label: labelText + ' (期間A)', data: detailAAgg, borderColor: color, fill: false, tension: 0.4, borderWidth: 2 });
+                                tableDatasets.push({ label: labelText + ' (期間A)', data: detailAAgg, isTotal: false });
+                            }
+                            if (hasB) {
+                                datasets.push({ label: labelText + ' (期間B)', data: detailBAgg, borderColor: color, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                                tableDatasets.push({ label: labelText + ' (期間B)', data: detailBAgg, isTotal: false });
+                            }
+                        }
+                    });
                 }
 
                 tableDatasets.push({ label: '【合算】期間A (' + labelTextA + ')', data: aAgg, isTotal: true });
@@ -1844,7 +2009,7 @@
                 const ratioRow = displayLabels.map((_, idx) => bAgg[idx] > 0 ? ((aAgg[idx] / bAgg[idx]) * 100) : 0);
                 tableDatasets.push({ label: '【比率】(A / B %)', data: ratioRow, isTotal: true, isRatio: true });
 
-                renderChart(displayLabels, datasets.slice(0, selection.displayMode === 'detailed' ? undefined : 2));
+                renderChart(displayLabels, datasets.slice(0, selection.displayMode !== 'aggregated' ? undefined : 2));
                 renderTable(displayLabels, tableDatasets);
                 updateCompareAIAnalysis(displayLabels, aAgg, bAgg, labelTextA, labelTextB, dat.details, sIdxA, eIdxA, sIdxB, eIdxB, slicedA, slicedB);
             } else {
@@ -2208,7 +2373,7 @@
                     maintainAspectRatio: false, 
                     plugins: { 
                         legend: { 
-                            display: selection.displayMode === 'detailed',
+                            display: selection.displayMode !== 'aggregated',
                             position: 'bottom',
                             labels: { boxWidth: 14, font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } }
                         } 
