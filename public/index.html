@@ -326,6 +326,7 @@
 
         // Translation logic
         window.categoryMapping = [];
+        window.routeMapping = [];
 
         window.translateCategory = function(categoryName) {
             if (!categoryName) return "";
@@ -411,33 +412,119 @@
             }
         };
 
+        window.translateRoute = function(routeName) {
+            if (!routeName) return "";
+            
+            let originalCode = "";
+            let itemName = routeName;
+            const spaceIdx = routeName.indexOf(" ");
+            if (spaceIdx !== -1) {
+                originalCode = routeName.substring(0, spaceIdx);
+                itemName = routeName.substring(spaceIdx + 1);
+            }
+            
+            if (!selection.translateCategories || !window.routeMapping || window.routeMapping.length === 0) {
+                return routeName;
+            }
+            
+            let targetCode = "";
+            const normalize = function(s) {
+                if (!s) return "";
+                return s.replace(/[\s　\-\(\)（）\+\/\*_ーｰ]/g, "").toLowerCase();
+            };
+            
+            let searchName = itemName;
+            const normItem = normalize(itemName);
+            
+            if (normItem === normalize("ジェームス")) {
+                searchName = "jms";
+            } else if (normItem === normalize("卸売")) {
+                searchName = "卸計";
+            } else if (normItem === normalize("直売")) {
+                searchName = "直売計";
+            } else if (normItem === normalize("大口ユーザー")) {
+                searchName = "大口ﾕｰｻﾞｰ";
+            }
+            
+            const normalizedSearch = normalize(searchName);
+            
+            // 1. Try exact normalized match
+            for (let i = 0; i < window.routeMapping.length; i++) {
+                const item = window.routeMapping[i];
+                if (!item.col_a) continue;
+                const normA = normalize(item.col_a);
+                if (normA === normalizedSearch) {
+                    targetCode = item.col_b;
+                    break;
+                }
+            }
+            
+            // 2. Try substring match (A is a substring of searchName)
+            if (!targetCode) {
+                for (let i = 0; i < window.routeMapping.length; i++) {
+                    const item = window.routeMapping[i];
+                    if (!item.col_a) continue;
+                    const normA = normalize(item.col_a);
+                    if (normA && normalizedSearch.indexOf(normA) !== -1) {
+                        targetCode = item.col_b;
+                        break;
+                    }
+                }
+            }
+            
+            // 3. Try inverse substring match (searchName is a substring of A)
+            if (!targetCode) {
+                for (let i = 0; i < window.routeMapping.length; i++) {
+                    const item = window.routeMapping[i];
+                    if (!item.col_a) continue;
+                    const normA = normalize(item.col_a);
+                    if (normalizedSearch && normA.indexOf(normalizedSearch) !== -1) {
+                        targetCode = item.col_b;
+                        break;
+                    }
+                }
+            }
+            
+            if (targetCode) {
+                return targetCode + "_" + itemName;
+            } else {
+                return itemName;
+            }
+        };
+
         window.translateLabel = function(label) {
             if (!label) return "";
             if (!selection.translateCategories) return label;
             
             const parts = label.split(" / ");
             if (parts.length === 3) {
+                const branchPart = parts[0];
+                const routePart = translateRoute(parts[1]);
                 const catPart = parts[2];
                 const parenIndex = catPart.lastIndexOf(" (");
                 if (parenIndex !== -1) {
                     const catName = catPart.substring(0, parenIndex);
                     const suffix = catPart.substring(parenIndex);
-                    return `${parts[0]} / ${parts[1]} / ${translateCategory(catName)}${suffix}`;
+                    return `${branchPart} / ${routePart} / ${translateCategory(catName)}${suffix}`;
                 } else {
-                    return `${parts[0]} / ${parts[1]} / ${translateCategory(catPart)}`;
+                    return `${branchPart} / ${routePart} / ${translateCategory(catPart)}`;
                 }
             }
             
             const parenIndex = label.lastIndexOf(" (");
             if (parenIndex !== -1) {
-                const catName = label.substring(0, parenIndex);
+                const innerName = label.substring(0, parenIndex);
                 const suffix = label.substring(parenIndex);
-                if (DATA_MATRIX.classes.includes(catName)) {
-                    return `${translateCategory(catName)}${suffix}`;
+                if (DATA_MATRIX.classes.includes(innerName)) {
+                    return `${translateCategory(innerName)}${suffix}`;
+                } else if (DATA_MATRIX.routes.includes(innerName)) {
+                    return `${translateRoute(innerName)}${suffix}`;
                 }
             } else {
                 if (DATA_MATRIX.classes.includes(label)) {
                     return translateCategory(label);
+                } else if (DATA_MATRIX.routes.includes(label)) {
+                    return translateRoute(label);
                 }
             }
             return label;
@@ -448,6 +535,7 @@
             saveSelection();
             syncUIControls();
             
+            renderChips('route', selection.routes);
             renderChips('category', selection.categories);
             
             if (selection.activeTab === 'breakdown') {
@@ -590,10 +678,14 @@
             setTimeout(hideLoading, 6000);
 
             try {
-                const [res, mappingRes] = await Promise.all([
+                const [res, mappingRes, routeMappingRes] = await Promise.all([
                     fetchWithTimeout(BASE_URL + "/dashboard_metadata/current"),
                     fetchWithTimeout(BASE_URL + "/dashboard_metadata/category_mapping").catch(err => {
                         console.warn("Failed to fetch category mapping, fallback to empty", err);
+                        return { ok: false };
+                    }),
+                    fetchWithTimeout(BASE_URL + "/dashboard_metadata/route_mapping").catch(err => {
+                        console.warn("Failed to fetch route mapping, fallback to empty", err);
                         return { ok: false };
                     })
                 ]);
@@ -619,6 +711,21 @@
                         }
                     } catch (err) {
                         console.error("Error parsing category mapping", err);
+                    }
+                }
+                
+                window.routeMapping = [];
+                if (routeMappingRes && routeMappingRes.ok) {
+                    try {
+                        const rMappingData = await routeMappingRes.json();
+                        if (rMappingData.fields && rMappingData.fields.mappings) {
+                            const rawRMappings = fromFirestoreValue(rMappingData.fields.mappings);
+                            if (Array.isArray(rawRMappings)) {
+                                window.routeMapping = rawRMappings;
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error parsing route mapping", err);
                     }
                 }
                 
@@ -1794,7 +1901,9 @@
             const container = document.getElementById('chips-' + type);
             if (!container) return;
             container.innerHTML = items.filter(it => it).map(it => {
-                const displayText = (type === 'category') ? translateCategory(it) : it;
+                let displayText = it;
+                if (type === 'category') displayText = translateCategory(it);
+                else if (type === 'route') displayText = translateRoute(it);
                 return '<span class="chip">' + displayText + '</span>';
             }).join('');
         }
@@ -2085,7 +2194,9 @@
             const list = document.getElementById('picker-list');
             list.innerHTML = items.map(item => {
                 const isS = tempSelected.indexOf(item) !== -1;
-                const displayText = (activePicker === 'category') ? translateCategory(item) : item;
+                let displayText = item;
+                if (activePicker === 'category') displayText = translateCategory(item);
+                else if (activePicker === 'route') displayText = translateRoute(item);
                 return '<div onclick="toggleItem(\''+item+'\')" class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between cursor-pointer '+(isS?'list-item-selected':'text-slate-600')+'"><span class="text-sm font-black">'+displayText+'</span>'+(isS?'<i data-lucide="check" class="w-5 h-5"></i>':'')+'</div>';
             }).join('');
             lucide.createIcons();
@@ -2102,7 +2213,9 @@
             const q = document.getElementById('picker-search').value.toLowerCase();
             renderPickerList(pickerItems.filter(i => {
                 const originalText = i.toLowerCase();
-                const translatedText = (activePicker === 'category') ? translateCategory(i).toLowerCase() : "";
+                let translatedText = "";
+                if (activePicker === 'category') translatedText = translateCategory(i).toLowerCase();
+                else if (activePicker === 'route') translatedText = translateRoute(i).toLowerCase();
                 return originalText.indexOf(q) !== -1 || translatedText.indexOf(q) !== -1;
             }));
         };
