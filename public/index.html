@@ -329,21 +329,86 @@
 
         window.translateCategory = function(categoryName) {
             if (!categoryName) return "";
+            
+            let originalCode = "";
+            let itemName = categoryName;
+            const underscoreIdx = categoryName.indexOf("_");
+            if (underscoreIdx !== -1) {
+                originalCode = categoryName.substring(0, underscoreIdx);
+                itemName = categoryName.substring(underscoreIdx + 1);
+            }
+            
             if (!selection.translateCategories || !window.categoryMapping || window.categoryMapping.length === 0) {
                 return categoryName;
             }
             
-            const normalizedCat = categoryName.replace(/\s+/g, "");
+            let treeCode = "";
+            const normalize = function(s) {
+                if (!s) return "";
+                return s.replace(/[\s　\-\(\)（）\+\/\*_]/g, "").toLowerCase();
+            };
             
+            let searchName = itemName;
+            const normItem = normalize(itemName);
+            
+            if (normItem === normalize("総売上（除通信事業）") || normItem === normalize("総売上(除通信事業)")) {
+                searchName = "部品計";
+            } else if (normItem === normalize("ミシュランタイヤ")) {
+                searchName = "MIタイヤ計";
+            } else if (normItem === normalize("ダンロップタイヤ")) {
+                searchName = "DLタイヤ計";
+            } else if (normItem === normalize("GYタイヤ")) {
+                searchName = "GYタイヤ計";
+            } else if (normItem === normalize("タイヤその他")) {
+                searchName = "その他タイヤ";
+            } else if (normItem === normalize("機能部品")) {
+                searchName = "機能部品・他";
+            }
+            
+            const normalizedSearch = normalize(searchName);
+            
+            // 1. Try exact normalized match
             for (let i = 0; i < window.categoryMapping.length; i++) {
                 const item = window.categoryMapping[i];
                 if (!item.col_f) continue;
-                const normalizedF = item.col_f.replace(/\s+/g, "");
-                if (normalizedF && normalizedCat.indexOf(normalizedF) !== -1) {
-                    return item.col_g || categoryName;
+                const normF = normalize(item.col_f);
+                if (normF === normalizedSearch) {
+                    treeCode = item.col_g;
+                    break;
                 }
             }
-            return categoryName;
+            
+            // 2. Try substring match (F is a substring of searchName)
+            if (!treeCode) {
+                for (let i = 0; i < window.categoryMapping.length; i++) {
+                    const item = window.categoryMapping[i];
+                    if (!item.col_f) continue;
+                    const normF = normalize(item.col_f);
+                    if (normF && normalizedSearch.indexOf(normF) !== -1) {
+                        treeCode = item.col_g;
+                        break;
+                    }
+                }
+            }
+            
+            // 3. Try inverse substring match (searchName is a substring of F)
+            if (!treeCode) {
+                for (let i = 0; i < window.categoryMapping.length; i++) {
+                    const item = window.categoryMapping[i];
+                    if (!item.col_f) continue;
+                    const normF = normalize(item.col_f);
+                    if (normalizedSearch && normF.indexOf(normalizedSearch) !== -1) {
+                        treeCode = item.col_g;
+                        break;
+                    }
+                }
+            }
+            
+            if (treeCode) {
+                return treeCode + "_" + itemName;
+            } else {
+                return itemName;
+            }
         };
 
         window.translateLabel = function(label) {
