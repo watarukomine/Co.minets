@@ -153,6 +153,11 @@
                     起動中...
                 </div>
                 <div class="flex items-center gap-4">
+                    <!-- Notation Translation Switch -->
+                    <div class="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200 mr-2 shadow-sm">
+                        <button id="view-mode-tmp-one" onclick="toggleTranslationMode(false)" class="px-3 py-1 text-xs font-black rounded-lg transition-all bg-white text-slate-800 shadow-sm focus:outline-none">TMP-ONE表記</button>
+                        <button id="view-mode-unified-tree" onclick="toggleTranslationMode(true)" class="px-3 py-1 text-xs font-black rounded-lg transition-all text-slate-400 hover:text-slate-600 focus:outline-none">TMP統一ツリー</button>
+                    </div>
                     <div id="fetch-loader" class="hidden items-center gap-2 text-sm font-black text-primary animate-pulse">
                         <div class="w-2 h-2 bg-primary rounded-full"></div> データ読込中... <span class="text-[10px] text-primary/50 font-normal ml-0.5">Loading Data</span>
                     </div>
@@ -295,7 +300,7 @@
         const BASE_URL = "https://firestore.googleapis.com/v1/projects/" + PROJECT_ID + "/databases/" + DATABASE_ID + "/documents";
         let DATA_MATRIX = { branches: [], routes: [], classes: [], timeline: [], results: {} };
         let chart = null, breakdownChart = null;
-        let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "aggregated", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31", selectedYears: [], activeTab: 'trend' };
+        let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "aggregated", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31", selectedYears: [], activeTab: 'trend', translateCategories: false };
         let activePicker = null, pickerItems = [], tempSelected = [];
 
         // Universal Fetch with Timeout (Old-school approach for max compatibility)
@@ -318,6 +323,74 @@
                 console.error("Failed to save selection to localStorage", e);
             }
         }
+
+        // Translation logic
+        window.categoryMapping = [];
+
+        window.translateCategory = function(categoryName) {
+            if (!categoryName) return "";
+            if (!selection.translateCategories || !window.categoryMapping || window.categoryMapping.length === 0) {
+                return categoryName;
+            }
+            
+            const normalizedCat = categoryName.replace(/\s+/g, "");
+            
+            for (let i = 0; i < window.categoryMapping.length; i++) {
+                const item = window.categoryMapping[i];
+                if (!item.col_f) continue;
+                const normalizedF = item.col_f.replace(/\s+/g, "");
+                if (normalizedF && normalizedCat.indexOf(normalizedF) !== -1) {
+                    return item.col_g || categoryName;
+                }
+            }
+            return categoryName;
+        };
+
+        window.translateLabel = function(label) {
+            if (!label) return "";
+            if (!selection.translateCategories) return label;
+            
+            const parts = label.split(" / ");
+            if (parts.length === 3) {
+                const catPart = parts[2];
+                const parenIndex = catPart.lastIndexOf(" (");
+                if (parenIndex !== -1) {
+                    const catName = catPart.substring(0, parenIndex);
+                    const suffix = catPart.substring(parenIndex);
+                    return `${parts[0]} / ${parts[1]} / ${translateCategory(catName)}${suffix}`;
+                } else {
+                    return `${parts[0]} / ${parts[1]} / ${translateCategory(catPart)}`;
+                }
+            }
+            
+            const parenIndex = label.lastIndexOf(" (");
+            if (parenIndex !== -1) {
+                const catName = label.substring(0, parenIndex);
+                const suffix = label.substring(parenIndex);
+                if (DATA_MATRIX.classes.includes(catName)) {
+                    return `${translateCategory(catName)}${suffix}`;
+                }
+            } else {
+                if (DATA_MATRIX.classes.includes(label)) {
+                    return translateCategory(label);
+                }
+            }
+            return label;
+        };
+
+        window.toggleTranslationMode = function(enable) {
+            selection.translateCategories = enable;
+            saveSelection();
+            syncUIControls();
+            
+            renderChips('category', selection.categories);
+            
+            if (selection.activeTab === 'breakdown') {
+                updateBreakdown();
+            } else {
+                update();
+            }
+        };
 
         function loadSelection() {
             try {
@@ -358,6 +431,7 @@
                     
                     if (typeof parsed.activeTab === 'string') selection.activeTab = parsed.activeTab;
                     if (typeof parsed.breakdownPeriod === 'string') selection.breakdownPeriod = parsed.breakdownPeriod;
+                    if (typeof parsed.translateCategories === 'boolean') selection.translateCategories = parsed.translateCategories;
                 }
             } catch (e) {
                 console.error("Failed to load selection from localStorage", e);
@@ -432,6 +506,18 @@
                     breakSel.value = selection.breakdownPeriod;
                 }
             }
+
+            const tmpOneBtn = document.getElementById('view-mode-tmp-one');
+            const unifiedBtn = document.getElementById('view-mode-unified-tree');
+            if (tmpOneBtn && unifiedBtn) {
+                if (selection.translateCategories) {
+                    tmpOneBtn.className = "px-3 py-1 text-xs font-black rounded-lg transition-all text-slate-400 hover:text-slate-600 focus:outline-none";
+                    unifiedBtn.className = "px-3 py-1 text-xs font-black rounded-lg transition-all bg-white text-slate-800 shadow-sm focus:outline-none";
+                } else {
+                    tmpOneBtn.className = "px-3 py-1 text-xs font-black rounded-lg transition-all bg-white text-slate-800 shadow-sm focus:outline-none";
+                    unifiedBtn.className = "px-3 py-1 text-xs font-black rounded-lg transition-all text-slate-400 hover:text-slate-600 focus:outline-none";
+                }
+            }
         }
 
         async function init() {
@@ -439,7 +525,14 @@
             setTimeout(hideLoading, 6000);
 
             try {
-                const res = await fetchWithTimeout(BASE_URL + "/dashboard_metadata/current");
+                const [res, mappingRes] = await Promise.all([
+                    fetchWithTimeout(BASE_URL + "/dashboard_metadata/current"),
+                    fetchWithTimeout(BASE_URL + "/dashboard_metadata/category_mapping").catch(err => {
+                        console.warn("Failed to fetch category mapping, fallback to empty", err);
+                        return { ok: false };
+                    })
+                ]);
+                
                 const data = await res.json();
                 if (!data.fields) throw new Error("Metadata empty");
                 
@@ -449,7 +542,26 @@
                 DATA_MATRIX.classes = meta.classes || [];
                 DATA_MATRIX.timeline = meta.timeline || [];
                 
+                window.categoryMapping = [];
+                if (mappingRes && mappingRes.ok) {
+                    try {
+                        const mappingData = await mappingRes.json();
+                        if (mappingData.fields && mappingData.fields.mappings) {
+                            const rawMappings = fromFirestoreValue(mappingData.fields.mappings);
+                            if (Array.isArray(rawMappings)) {
+                                window.categoryMapping = rawMappings;
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error parsing category mapping", err);
+                    }
+                }
+                
                 loadSelection();
+
+                if (selection.translateCategories === undefined) {
+                    selection.translateCategories = false;
+                }
 
                 const kanagawa = DATA_MATRIX.branches.find(b => b.indexOf("神奈川支社") !== -1);
                 if (!selection.branches || selection.branches.length === 0) {
@@ -611,13 +723,14 @@
                     const hasP = detailPAgg.some(v => v !== 0);
                     
                     if (hasC || hasP) {
-                        if (hasC) tableDatasets.push({ label: d.label + " (当年)", data: detailCAgg, isTotal: false });
-                        if (hasP) tableDatasets.push({ label: d.label + " (前年)", data: detailPAgg, isTotal: false });
+                        const translatedLabel = translateLabel(d.label);
+                        if (hasC) tableDatasets.push({ label: translatedLabel + " (当年)", data: detailCAgg, isTotal: false });
+                        if (hasP) tableDatasets.push({ label: translatedLabel + " (前年)", data: detailPAgg, isTotal: false });
                         
                         if (selection.displayMode === 'detailed') {
                             const cColor = colors[i % colors.length];
-                            if (hasC) datasets.push({ label: d.label + " (当年)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
-                            if (hasP) datasets.push({ label: d.label + " (前年)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                            if (hasC) datasets.push({ label: translatedLabel + " (当年)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
+                            if (hasP) datasets.push({ label: translatedLabel + " (前年)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
                         }
                     }
                 }
@@ -801,7 +914,7 @@
                             const detailYData = getYearData(y, d.c).map(v => v / selection.unit);
                             const hasData = detailYData.some(v => v !== 0);
                             if (hasData) {
-                                const label = `${d.label} (${y}年度)`;
+                                const label = `${translateLabel(d.label)} (${y}年度)`;
                                 const borderDash = yIdx > 0 ? [5, 5] : [];
                                 datasets.push({
                                     label: label,
@@ -1125,7 +1238,7 @@
             const datasets = [];
             categories.forEach((cat, idx) => {
                 datasets.push({
-                    label: cat,
+                    label: translateCategory(cat),
                     data: branches.map(b => dataMap[b][cat] / selection.unit),
                     backgroundColor: colors[idx % colors.length],
                     borderColor: 'white',
@@ -1221,7 +1334,7 @@
             h.innerHTML = `<tr>
                 <th class='p-4 whitespace-nowrap'>支社名</th>
                 <th class='p-4 text-right min-w-[120px] bg-slate-50'>総売上 (${unitText})</th>
-                ${categories.map(cat => `<th class='p-4 text-right min-w-[120px]'>${cat} (${unitText})</th>`).join('')}
+                ${categories.map(cat => `<th class='p-4 text-right min-w-[120px]'>${translateCategory(cat)} (${unitText})</th>`).join('')}
                 ${showSpecifiedTotal ? `<th class='p-4 text-right min-w-[120px] bg-emerald-50/50 text-emerald-950 font-black'>選択合計 (${unitText})</th>` : ''}
             </tr>`;
             
@@ -1462,13 +1575,14 @@
                     const hasA = detailAAgg.some(v => v !== 0);
                     const hasB = detailBAgg.some(v => v !== 0);
                     if (hasA || hasB) {
-                        if (hasA) tableDatasets.push({ label: d.label + ' (期間A)', data: detailAAgg, isTotal: false });
-                        if (hasB) tableDatasets.push({ label: d.label + ' (期間B)', data: detailBAgg, isTotal: false });
+                        const labelText = translateLabel(d.label);
+                        if (hasA) tableDatasets.push({ label: labelText + ' (期間A)', data: detailAAgg, isTotal: false });
+                        if (hasB) tableDatasets.push({ label: labelText + ' (期間B)', data: detailBAgg, isTotal: false });
 
                         if (selection.displayMode === 'detailed') {
                             const cColor = colors[i % colors.length];
-                            if (hasA) datasets.push({ label: d.label + ' (期間A)', data: detailAAgg, borderColor: cColor, fill: false, tension: 0.4, borderWidth: 2 });
-                            if (hasB) datasets.push({ label: d.label + ' (期間B)', data: detailBAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                            if (hasA) datasets.push({ label: labelText + ' (期間A)', data: detailAAgg, borderColor: cColor, fill: false, tension: 0.4, borderWidth: 2 });
+                            if (hasB) datasets.push({ label: labelText + ' (期間B)', data: detailBAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
                         }
                     }
                 }
@@ -1614,7 +1728,10 @@
         function renderChips(type, items) {
             const container = document.getElementById('chips-' + type);
             if (!container) return;
-            container.innerHTML = items.filter(it => it).map(it => '<span class="chip">' + it + '</span>').join('');
+            container.innerHTML = items.filter(it => it).map(it => {
+                const displayText = (type === 'category') ? translateCategory(it) : it;
+                return '<span class="chip">' + displayText + '</span>';
+            }).join('');
         }
 
         function updateAIAnalysis(labels, cAgg, pAgg, details = [], sIdx = 0, eIdx = 0, sliced = []) {
@@ -1903,7 +2020,8 @@
             const list = document.getElementById('picker-list');
             list.innerHTML = items.map(item => {
                 const isS = tempSelected.indexOf(item) !== -1;
-                return '<div onclick="toggleItem(\''+item+'\')" class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between cursor-pointer '+(isS?'list-item-selected':'text-slate-600')+'"><span class="text-sm font-black">'+item+'</span>'+(isS?'<i data-lucide="check" class="w-5 h-5"></i>':'')+'</div>';
+                const displayText = (activePicker === 'category') ? translateCategory(item) : item;
+                return '<div onclick="toggleItem(\''+item+'\')" class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between cursor-pointer '+(isS?'list-item-selected':'text-slate-600')+'"><span class="text-sm font-black">'+displayText+'</span>'+(isS?'<i data-lucide="check" class="w-5 h-5"></i>':'')+'</div>';
             }).join('');
             lucide.createIcons();
         }
@@ -1917,7 +2035,11 @@
         window.clearAll = function() { tempSelected = []; renderPickerList(pickerItems); };
         window.filterPicker = function() {
             const q = document.getElementById('picker-search').value.toLowerCase();
-            renderPickerList(pickerItems.filter(i => i.toLowerCase().indexOf(q) !== -1));
+            renderPickerList(pickerItems.filter(i => {
+                const originalText = i.toLowerCase();
+                const translatedText = (activePicker === 'category') ? translateCategory(i).toLowerCase() : "";
+                return originalText.indexOf(q) !== -1 || translatedText.indexOf(q) !== -1;
+            }));
         };
         window.applySelection = function() {
             if(tempSelected.length===0){alert("1つ以上選んでください");return;}

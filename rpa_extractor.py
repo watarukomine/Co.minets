@@ -15,6 +15,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import zipfile
+import json
+
 
 # ==========================================
 # 抽出パターンのマスターデータ (2,700全件・優先順位付き)
@@ -70,6 +72,44 @@ SALES_CLASSES_DETAIL = [
     "914_TMP用品", "915_TZ用品", "916_TMP車種専用品", "917_夏タイヤ", "918_冬タイヤ"
 ]
 SALES_CLASSES_ALL = SALES_CLASSES_CORE + SALES_CLASSES_DETAIL
+
+# --- 常に実績0件（データなし）となる除外パターンのロード ---
+EXCLUDE_COMBINATIONS = []
+exclude_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "always_zero_combinations.json")
+if os.path.exists(exclude_json_path):
+    try:
+        with open(exclude_json_path, 'r', encoding='utf-8') as f:
+            exclude_data = json.load(f)
+            EXCLUDE_COMBINATIONS = [(item['route'], item['sales_class']) for item in exclude_data]
+            print(f"  [情報] always_zero_combinations.json から {len(EXCLUDE_COMBINATIONS)} 件 of 除外組み合わせをロードしました。")
+    except Exception as e:
+        print(f"  [警告] always_zero_combinations.json のロードに失敗しました: {e}")
+
+if not EXCLUDE_COMBINATIONS:
+    # フォールバック用ハードコードリスト
+    EXCLUDE_COMBINATIONS = [
+        ("b-03 ジェームス", "245_礦油その他"),
+        ("b-03 ジェームス", "321_S部品"),
+        ("b-03 ジェームス", "415_T-Connectナビキット"),
+        ("b-03 ジェームス", "427_その他ドライブレコーダー"),
+        ("c-01 卸売", "550_新車カタログ"),
+        ("c-02 直売", "480_用品その他"),
+        ("d-02 その他再販業者", "233_GSユアサ"),
+        ("d-02 その他再販業者", "415_T-Connectナビキット"),
+        ("d-03 修理業者", "550_新車カタログ"),
+        ("d-04 GSS", "415_T-Connectナビキット"),
+        ("d-05 用品小売り店", "321_S部品"),
+        ("d-05 用品小売り店", "480_用品その他"),
+        ("d-06 その他", "480_用品その他"),
+        ("e-01 修理工場", "480_用品その他"),
+        ("e-01 修理工場", "530_C＋WALK（本体）"),
+        ("e-02 特定修理業者", "417_本部扱いナビ"),
+        ("e-02 特定修理業者", "911_レクサス車TRD"),
+        ("e-02 特定修理業者", "913_レクサス車モデリスタ"),
+        ("e-03 大口ユーザー", "415_T-Connectナビキット"),
+        ("e-03 大口ユーザー", "550_新車カタログ"),
+    ]
+
 
 # --- 変更点：保存先をローカルCドライブにする ---
 DOWNLOAD_DIR = r"C:\Users\00137012\Desktop\rpa_downloads"
@@ -273,8 +313,17 @@ def main():
     try:
         WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, "//iframe[contains(@src, 'quicksight')]")))
         print("★ iframe接続成功")
-    except:
-        print("iframe接続に失敗しました。")
+        
+        # 支社フィルターを自動的に「すべて」に設定する
+        print("  [初期設定] 支社フィルターを「すべて」に設定します...")
+        try:
+            set_quicksight_filter(driver, "支社", "すべて")
+            print("  ✓ 支社フィルターを「すべて」に設定完了")
+        except Exception as e:
+            print(f"  [警告] 支社フィルターの設定に失敗しました: {e} (手動で「すべて」になっているか確認してください)")
+            
+    except Exception as e:
+        print(f"iframe接続に失敗しました: {e}")
 
     total_expected = len(AMOUNT_TYPES) * len(ROUTES_ALL) * len(SALES_CLASSES_ALL)
     pattern_count = 0
@@ -308,6 +357,20 @@ def main():
                 
                 final_path_zero = os.path.join(X_DEST_DIR, f"[ZERO_DATA]{target_filename}")
                 
+                # 常にデータなしとなる除外パターンのチェック
+                if (route, sc) in EXCLUDE_COMBINATIONS:
+                    print(f"  [除外スキップ] 常にデータなしとなる組み合わせのためスキップ: {route} - {sc}")
+                    if not os.path.exists(final_path_zero):
+                        try:
+                            with open(final_path_zero, 'w', encoding='utf-8') as f:
+                                f.write(f"Zero data (statically excluded) at {datetime.now().isoformat()}")
+                            print(f"  ✓ マーカーファイルを作成しました: [ZERO_DATA]{target_filename}")
+                        except Exception as e:
+                            print(f"  [警告] マーカーファイルの作成に失敗しました: {e}")
+                    skip_count += 1
+                    success_count += 1
+                    continue
+
                 if os.path.exists(final_path_csv) or os.path.exists(final_path_zip) or os.path.exists(final_path_zero):
                     status = "CSV" if os.path.exists(final_path_csv) else ("ZIP" if os.path.exists(final_path_zip) else "ZERO_DATA")
                     print(f"  [スキップ] 既にXドライブに存在します({status}): {target_filename}")

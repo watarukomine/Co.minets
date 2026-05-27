@@ -1,0 +1,82 @@
+[
+  {
+    "route": "b-03 ジェームス",
+    "sales_class": "245_礦油その他"
+  },
+  {
+    "route": "b-03 ジェームス",
+    "sales_class": "321_S部品"
+  },
+  {
+    "route": "b-03 ジェームス",
+    "sales_class": "415_T-Connectナビキット"
+  },
+  {
+    "route": "b-03 ジェームス",
+    "sales_class": "427_その他ドライブレコーダー"
+  },
+  {
+    "route": "c-01 卸売",
+    "sales_class": "550_新車カタログ"
+  },
+  {
+    "route": "c-02 直売",
+    "sales_class": "480_用品その他"
+  },
+  {
+    "route": "d-02 その他再販業者",
+    "sales_class": "233_GSユアサ"
+  },
+  {
+    "route": "d-02 その他再販業者",
+    "sales_class": "415_T-Connectナビキット"
+  },
+  {
+    "route": "d-03 修理業者",
+    "sales_class": "550_新車カタログ"
+  },
+  {
+    "route": "d-04 GSS",
+    "sales_class": "415_T-Connectナビキット"
+  },
+  {
+    "route": "d-05 用品小売り店",
+    "sales_class": "321_S部品"
+  },
+  {
+    "route": "d-05 用品小売り店",
+    "sales_class": "480_用品その他"
+  },
+  {
+    "route": "d-06 その他",
+    "sales_class": "480_用品その他"
+  },
+  {
+    "route": "e-01 修理工場",
+    "sales_class": "480_用品その他"
+  },
+  {
+    "route": "e-01 修理工場",
+    "sales_class": "530_C＋WALK（本体）"
+  },
+  {
+    "route": "e-02 特定修理業者",
+    "sales_class": "417_本部扱いナビ"
+  },
+  {
+    "route": "e-02 特定修理業者",
+    "sales_class": "911_レクサス車TRD"
+  },
+  {
+    "route": "e-02 特定修理業者",
+    "sales_class": "913_レクサス車モデリスタ"
+  },
+  {
+    "route": "e-03 大口ユーザー",
+    "sales_class": "415_T-Connectナビキット"
+  },
+  {
+    "route": "e-03 大口ユーザー",
+    "sales_class": "550_新車カタログ"
+  }
+]
