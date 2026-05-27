@@ -1371,9 +1371,10 @@
             
             const dataMap = {};
             branches.forEach(b => {
-                dataMap[b] = { total: 0 };
+                dataMap[b] = { total: 0, p_total: 0 };
                 categories.forEach(c => {
                     dataMap[b][c] = 0;
+                    dataMap[b]["p_" + c] = 0;
                 });
                 dataMap[b]["その他"] = 0;
             });
@@ -1381,25 +1382,32 @@
             details.forEach(d => {
                 if (dataMap[d.branch]) {
                     let sum = 0;
+                    let p_sum = 0;
                     for (let i = sIdx; i <= eIdx; i++) {
                         sum += d.c[i] || 0;
+                        p_sum += d.p[i] || 0;
                     }
                     
                     if (d.category === "100_総売上") {
                         dataMap[d.branch].total += sum;
+                        dataMap[d.branch].p_total += p_sum;
                     }
                     if (categories.indexOf(d.category) !== -1) {
                         dataMap[d.branch][d.category] += sum;
+                        dataMap[d.branch]["p_" + d.category] += p_sum;
                     }
                 }
             });
             
             branches.forEach(b => {
                 let specifiedSum = 0;
+                let p_specifiedSum = 0;
                 categories.forEach(c => {
                     specifiedSum += dataMap[b][c];
+                    p_specifiedSum += dataMap[b]["p_" + c];
                 });
                 dataMap[b].specifiedSum = specifiedSum;
+                dataMap[b].p_specifiedSum = p_specifiedSum;
                 const other = dataMap[b].total - specifiedSum;
                 dataMap[b]["その他"] = Math.max(0, other);
             });
@@ -1410,12 +1418,31 @@
             const datasets = [];
             categories.forEach((cat, idx) => {
                 datasets.push({
+                    type: 'bar',
                     label: translateCategory(cat),
                     data: branches.map(b => dataMap[b][cat] / selection.unit),
                     backgroundColor: colors[idx % colors.length],
                     borderColor: 'white',
                     borderWidth: 1
                 });
+            });
+
+            // Push the last year's specified total line chart dataset
+            datasets.push({
+                type: 'line',
+                label: '前年実績 (選択合計)',
+                data: branches.map(b => dataMap[b].p_specifiedSum / selection.unit),
+                borderColor: '#64748b', // Cool gray
+                backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                borderWidth: 3,
+                tension: 0.3,
+                fill: false,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#64748b',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                order: -1
             });
             
             renderBreakdownChart(labels, datasets);
@@ -1463,7 +1490,7 @@
                         
                         chart.data.datasets.forEach((dataset, datasetIdx) => {
                             const meta = chart.getDatasetMeta(datasetIdx);
-                            if (meta.hidden) return;
+                            if (meta.hidden || dataset.type === 'line') return;
                             
                             meta.data.forEach((element, index) => {
                                 const val = dataset.data[index];
