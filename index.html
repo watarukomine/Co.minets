@@ -99,11 +99,11 @@
                         <option value="day">日別</option>
                     </select>
                     <select id="displayModeSelect" onchange="onDisplayModeChange()" class="w-full p-3 bg-primary text-white border border-primary-100 rounded-xl font-black outline-none cursor-pointer text-sm shadow-lg shadow-primary/20">
-                        <option value="aggregated">合算グラフ表示</option>
                         <option value="detailed">個別グラフ表示（全内訳）</option>
                         <option value="by_branch">支社別グラフ表示</option>
                         <option value="by_route">ルート別グラフ表示</option>
                         <option value="by_category">販売区分別グラフ表示</option>
+                        <option value="aggregated">合算グラフ表示</option>
                     </select>
                     <select id="unitSelect" onchange="onUnitChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none cursor-pointer text-sm">
                         <option value="0.001">表示単位: 円</option>
@@ -281,18 +281,18 @@
         </main>
 
         <!-- List Selector Modal -->
-        <div id="picker-modal" class="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/10 backdrop-blur-md hidden px-4">
-            <div class="bg-white w-full max-w-xl max-h-[85vh] rounded-[3.5rem] shadow-2xl p-12 flex flex-col">
-                <div class="flex items-center justify-between mb-8">
-                    <h3 id="picker-title" class="text-3xl font-black text-slate-800 tracking-tighter">選択リスト</h3>
-                    <button onclick="closePicker()" class="w-12 h-12 flex items-center justify-center hover:bg-slate-50 rounded-full text-slate-300"><i data-lucide="x" class="w-8 h-8"></i></button>
+        <div id="picker-modal" class="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/10 backdrop-blur-md hidden px-4 py-6 overflow-y-auto">
+            <div class="bg-white w-full max-w-xl max-h-[90vh] rounded-[2.5rem] shadow-2xl p-8 md:p-10 flex flex-col">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 id="picker-title" class="text-2xl font-black text-slate-800 tracking-tighter">選択リスト</h3>
+                    <button onclick="closePicker()" class="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-full text-slate-300"><i data-lucide="x" class="w-6 h-6"></i></button>
                 </div>
-                <input type="text" id="picker-search" oninput="filterPicker()" placeholder="名前で絞り込む..." class="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-12 text-sm font-bold outline-none mb-6">
-                <div id="picker-list" class="flex-1 overflow-y-auto custom-scrollbar space-y-1 mb-8 pr-2 min-h-[300px]"></div>
-                <div class="flex gap-3">
-                    <button onclick="selectAll()" class="flex-1 py-4 bg-slate-50 hover:bg-slate-100 rounded-2xl text-sm font-black">すべて選択 <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider mt-0.5">Select All</span></button>
-                    <button onclick="clearAll()" class="flex-1 py-4 bg-slate-50 hover:bg-slate-100 rounded-2xl text-sm font-black text-red-400">すべて解除 <span class="text-[10px] text-red-300 block font-medium uppercase tracking-wider mt-0.5">Clear All</span></button>
-                    <button onclick="applySelection()" class="flex-[2] py-4 bg-primary text-white rounded-2xl text-sm font-black shadow-xl shadow-primary/20">選択を適用する <span class="text-[10px] text-emerald-100 block font-medium uppercase tracking-wider mt-0.5">Apply & Update</span></button>
+                <input type="text" id="picker-search" oninput="filterPicker()" placeholder="名前で絞り込む..." class="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-10 text-sm font-bold outline-none mb-4">
+                <div id="picker-list" class="flex-1 overflow-y-auto custom-scrollbar space-y-1 mb-6 pr-2 min-h-[150px]"></div>
+                <div class="flex gap-2">
+                    <button onclick="selectAll()" class="flex-1 py-3.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs font-black">すべて選択 <span class="text-[9px] text-slate-400 block font-medium uppercase tracking-wider mt-0.5">Select All</span></button>
+                    <button onclick="clearAll()" class="flex-1 py-3.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs font-black text-red-400">すべて解除 <span class="text-[9px] text-red-300 block font-medium uppercase tracking-wider mt-0.5">Clear All</span></button>
+                    <button onclick="applySelection()" class="flex-[2] py-3.5 bg-primary text-white rounded-xl text-xs font-black shadow-xl shadow-primary/20">選択を適用する <span class="text-[9px] text-emerald-100 block font-medium uppercase tracking-wider mt-0.5">Apply & Update</span></button>
                 </div>
             </div>
         </div>
@@ -303,7 +303,7 @@
         const BASE_URL = "https://firestore.googleapis.com/v1/projects/" + PROJECT_ID + "/databases/" + DATABASE_ID + "/documents";
         let DATA_MATRIX = { branches: [], routes: [], classes: [], timeline: [], results: {} };
         let chart = null, breakdownChart = null;
-        let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "aggregated", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31", selectedYears: [], activeTab: 'trend', translateCategories: false };
+        let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "detailed", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31", selectedYears: [], activeTab: 'trend', translateCategories: false };
         let activePicker = null, pickerItems = [], tempSelected = [];
 
         // Universal Fetch with Timeout (Old-school approach for max compatibility)
@@ -550,6 +550,13 @@
 
         function loadSelection() {
             try {
+                const migrationKey = 'v2.3_defaults_migrated_mode_v3';
+                const migrated = localStorage.getItem(migrationKey);
+                if (!migrated) {
+                    localStorage.removeItem('analytics_selection');
+                    localStorage.setItem(migrationKey, 'true');
+                    return;
+                }
                 const saved = localStorage.getItem('analytics_selection');
                 if (!saved) return;
                 const parsed = JSON.parse(saved);
@@ -738,20 +745,41 @@
                     selection.translateCategories = false;
                 }
 
-                const kanagawa = DATA_MATRIX.branches.find(b => b.indexOf("神奈川支社") !== -1);
                 if (!selection.branches || selection.branches.length === 0) {
-                    selection.branches = [kanagawa || DATA_MATRIX.branches[0] || "未選択"];
+                    const defaultBranches = [];
+                    const kanagawa = DATA_MATRIX.branches.find(b => b.indexOf("神奈川支社") !== -1);
+                    if (kanagawa) defaultBranches.push(kanagawa);
+                    const tokyo = DATA_MATRIX.branches.find(b => b.indexOf("東京") !== -1);
+                    if (tokyo) defaultBranches.push(tokyo);
+                    const saitama = DATA_MATRIX.branches.find(b => b.indexOf("埼玉支社") !== -1);
+                    if (saitama) defaultBranches.push(saitama);
+                    const chiba = DATA_MATRIX.branches.find(b => b.indexOf("千葉支社") !== -1);
+                    if (chiba) defaultBranches.push(chiba);
+                    selection.branches = defaultBranches.length > 0 ? defaultBranches : [DATA_MATRIX.branches[0] || "未選択"];
                 }
                 if (!selection.routes || selection.routes.length === 0) {
-                    selection.routes = [DATA_MATRIX.routes[0] || "未選択"];
+                    const souhan = DATA_MATRIX.routes.find(r => r.indexOf("a-00 総販") !== -1);
+                    selection.routes = [souhan || DATA_MATRIX.routes[0] || "未選択"];
                 }
                 if (!selection.categories || selection.categories.length === 0) {
-                    selection.categories = [DATA_MATRIX.classes[0] || "未選択"];
+                    const souuriage = DATA_MATRIX.classes.find(c => c.indexOf("100_総売上") !== -1);
+                    selection.categories = [souuriage || DATA_MATRIX.classes[0] || "未選択"];
                 }
                 
                 if (DATA_MATRIX.timeline.length > 0) {
-                    if (!selection.startDate) selection.startDate = "2025-04-01";
-                    if (!selection.endDate) selection.endDate = "2026-03-31";
+                    let latestDateStr = DATA_MATRIX.timeline[DATA_MATRIX.timeline.length - 1];
+                    let parts = latestDateStr.split('-');
+                    let latestYear = parseInt(parts[0]);
+                    let latestMonth = parseInt(parts[1]);
+                    
+                    let currentFY = (latestMonth >= 4) ? latestYear : (latestYear - 1);
+                    let startYear = currentFY - 1;
+                    
+                    let startMonthStr = startYear + "-04-01";
+                    let endMonthStr = latestDateStr;
+                    
+                    if (!selection.startDate) selection.startDate = startMonthStr;
+                    if (!selection.endDate) selection.endDate = endMonthStr;
                 }
                 
                 populateYearCheckboxes();
@@ -830,6 +858,9 @@
                     const resObj = results[i].data;
                     details.push({
                         label: `${results[i].p.b} / ${results[i].p.r} / ${results[i].p.c}`,
+                        branch: results[i].p.b,
+                        route: results[i].p.r,
+                        category: results[i].p.c,
                         c: resObj.c,
                         p: resObj.p
                     });
@@ -912,9 +943,15 @@
                             if (hasC) tableDatasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, isTotal: false });
                             if (hasP) tableDatasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, isTotal: false });
                             
+                            const isKanagawa = d.label.includes("神奈川支社") || translatedLabel.includes("神奈川支社");
                             const cColor = colors[i % colors.length];
-                            if (hasC) datasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
-                            if (hasP) datasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                            const bWidthC = isKanagawa ? 3.5 : 1.5;
+                            const bWidthP = isKanagawa ? 2.5 : 1.0;
+                            const pRadius = isKanagawa ? 3.5 : 2;
+                            const pActiveRadius = isKanagawa ? 6 : 4;
+                            
+                            if (hasC) datasets.push({ label: translatedLabel + " (当期)", data: detailCAgg, borderColor: cColor, backgroundColor: isKanagawa ? cColor + '10' : 'transparent', fill: false, tension: 0.4, borderWidth: bWidthC, pointRadius: pRadius, pointHoverRadius: pActiveRadius });
+                            if (hasP) datasets.push({ label: translatedLabel + " (前期)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: bWidthP, hidden: true, pointRadius: pRadius, pointHoverRadius: pActiveRadius });
                         }
                     }
                 } else {
@@ -948,13 +985,21 @@
                             if (selection.displayMode === 'by_route') labelText = translateRoute(key);
                             else if (selection.displayMode === 'by_category') labelText = translateCategory(key);
                             
-                            const color = colors[idx % colors.length];
+                            const isKanagawa = labelText.includes("神奈川支社") || key.includes("神奈川支社");
+                            const shouldHighlight = isKanagawa && (selection.displayMode === 'by_branch');
+                            
+                            const color = shouldHighlight ? '#10b981' : colors[idx % colors.length];
+                            const bWidthC = shouldHighlight ? 4 : (selection.displayMode === 'by_branch' ? 1.5 : 2.5);
+                            const bWidthP = shouldHighlight ? 2.5 : (selection.displayMode === 'by_branch' ? 1.0 : 1.5);
+                            const pRadius = shouldHighlight ? 4 : (selection.displayMode === 'by_branch' ? 2 : 3);
+                            const pActiveRadius = shouldHighlight ? 6 : (selection.displayMode === 'by_branch' ? 4 : 5);
+                            
                             if (hasC) {
-                                datasets.push({ label: labelText + " (当期)", data: grp.c, borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4, borderWidth: 2 });
+                                datasets.push({ label: labelText + " (当期)", data: grp.c, borderColor: color, backgroundColor: shouldHighlight ? color + '10' : 'transparent', fill: false, tension: 0.4, borderWidth: bWidthC, pointRadius: pRadius, pointHoverRadius: pActiveRadius });
                                 tableDatasets.push({ label: labelText + " (当期)", data: grp.c, isTotal: false });
                             }
                             if (hasP) {
-                                datasets.push({ label: labelText + " (前期)", data: grp.p, borderColor: color, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                                datasets.push({ label: labelText + " (前期)", data: grp.p, borderColor: color, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: bWidthP, hidden: true, pointRadius: pRadius, pointHoverRadius: pActiveRadius });
                                 tableDatasets.push({ label: labelText + " (前期)", data: grp.p, isTotal: false });
                             }
                         }
@@ -2369,6 +2414,19 @@
         }
 
         function renderChart(labels, datasets) {
+            if (window.tooltipLockTimeout) {
+                clearTimeout(window.tooltipLockTimeout);
+                window.tooltipLockTimeout = null;
+            }
+            if (Chart.Tooltip && Chart.Tooltip.positioners && !Chart.Tooltip.positioners.top) {
+                Chart.Tooltip.positioners.top = function(items) {
+                    if (!items.length) return false;
+                    return {
+                        x: items[0].element.x,
+                        y: this.chart.chartArea.top + 10
+                    };
+                };
+            }
             const ctx = document.getElementById('mainChart').getContext('2d');
             if (chart) chart.destroy();
             chart = new Chart(ctx, {
@@ -2376,12 +2434,49 @@
                 options: { 
                     responsive: true, 
                     maintainAspectRatio: false, 
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    onClick: (event, activeElements, chartInstance) => {
+                        if (activeElements.length > 0) {
+                            const elementsAtVal = chartInstance.getElementsAtEventForMode(event, 'index', { intersect: false }, true);
+                            chartInstance.tooltip.setActiveElements(elementsAtVal, {
+                                x: activeElements[0].element.x,
+                                y: activeElements[0].element.y
+                            });
+                            chartInstance.options.events = ['click'];
+                            chartInstance.update();
+                            
+                            if (window.tooltipLockTimeout) clearTimeout(window.tooltipLockTimeout);
+                            window.tooltipLockTimeout = setTimeout(() => {
+                                chartInstance.options.events = ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'];
+                                chartInstance.tooltip.setActiveElements([], { x: 0, y: 0 });
+                                chartInstance.update();
+                            }, 7000);
+                        } else {
+                            if (window.tooltipLockTimeout) clearTimeout(window.tooltipLockTimeout);
+                            chartInstance.options.events = ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'];
+                            chartInstance.tooltip.setActiveElements([], { x: 0, y: 0 });
+                            chartInstance.update();
+                        }
+                    },
                     plugins: { 
                         legend: { 
                             display: selection.displayMode !== 'aggregated',
                             position: 'bottom',
                             labels: { boxWidth: 14, font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } }
-                        } 
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            caretPadding: 10,
+                            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+                            titleFont: { size: 13, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" },
+                            bodyFont: { size: 12, family: "'Outfit', 'Noto Sans JP', sans-serif" },
+                            padding: 10,
+                            cornerRadius: 8,
+                        }
                     },
                     scales: {
                         x: { ticks: { font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } } },
@@ -2648,17 +2743,20 @@
             const originalScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
             window.scrollTo(0, 0);
 
-            // 5. 一時的な印刷用コンテナを作成 (A4横サイズに綺麗に収めるため)
+            // 5. 一時的な印刷用コンテナを作成 (A4縦サイズに綺麗に収めるため、アスペクト比 1:1.414 を適用)
             const printArea = document.createElement('div');
             printArea.id = 'pdf-print-area';
             printArea.style.position = 'fixed';
             printArea.style.left = '0';
             printArea.style.top = '0';
             printArea.style.zIndex = '-9999'; // 画面の裏に隠す
-            printArea.style.width = '1600px';  // 1600px幅を確保
+            printArea.style.width = '1200px';  // 幅1200px
+            printArea.style.height = '1700px'; // A4の縦比率に合わせ高さを1700pxに固定
             printArea.style.backgroundColor = '#ffffff';
-            printArea.style.padding = '40px';
+            printArea.style.padding = '50px';
             printArea.style.boxSizing = 'border-box';
+            printArea.style.display = 'flex';
+            printArea.style.flexDirection = 'column';
             printArea.style.fontFamily = "'Outfit', 'Noto Sans JP', sans-serif";
 
             // ヘッダータイトル部分
@@ -2668,7 +2766,7 @@
             headerContainer.style.alignItems = 'baseline';
             headerContainer.style.borderBottom = '3px solid #10b981';
             headerContainer.style.paddingBottom = '10px';
-            headerContainer.style.marginBottom = '20px';
+            headerContainer.style.marginBottom = '25px';
 
             const title = document.createElement('h2');
             title.textContent = '実績分析レポート';
@@ -2687,14 +2785,15 @@
             headerContainer.appendChild(meta);
             printArea.appendChild(headerContainer);
 
-            // グラフ画像を配置 (A4横に収まるよう高さを調整)
+            // グラフ画像を配置 (A4縦の上部1/3を占めるよう高さを約480pxに設定)
             const imgContainer = document.createElement('div');
             imgContainer.style.width = '100%';
-            imgContainer.style.height = '280px';
+            imgContainer.style.height = '480px';
             imgContainer.style.marginBottom = '20px';
             imgContainer.style.display = 'flex';
             imgContainer.style.justifyContent = 'center';
             imgContainer.style.alignItems = 'center';
+            imgContainer.style.flexShrink = '0';
             
             const img = document.createElement('img');
             img.src = chartImageSrc;
@@ -2704,38 +2803,40 @@
             imgContainer.appendChild(img);
             printArea.appendChild(imgContainer);
 
-            // テーブルデータをクローンして追加
+            // テーブルデータをクローンして追加 (真ん中1/3に綺麗にレイアウト)
             const tableContainer = document.createElement('div');
             tableContainer.style.width = '100%';
+            tableContainer.style.marginBottom = '20px';
+            tableContainer.style.flexShrink = '0';
             
             const newTable = document.createElement('table');
             newTable.style.width = '100%';
             newTable.style.borderCollapse = 'collapse';
 
-            // 列数に応じた動的フォントサイズ・幅の調整（はみ出し防止）
+            // 列数に応じた動的フォントサイズ・幅の調整（A4縦の幅1200pxへのはみ出し防止）
             const colHeaders = tableHeader.querySelectorAll('th');
             const colCount = colHeaders.length - 1; // 分析区分列を除いたデータ列数
-            let fontSizeTh = '11px';
-            let fontSizeTd = '10px';
-            let paddingY = '6px';
-            let paddingX = '8px';
-            let minWidthTh = '80px';
-            let nameWidth = '320px';
+            let fontSizeTh = '10px';
+            let fontSizeTd = '9.5px';
+            let paddingY = '5px';
+            let paddingX = '6px';
+            let minWidthTh = '60px';
+            let nameWidth = activeTab === 'trend' ? '240px' : '120px'; // 内訳タブなら支社名のみなので120pxで十分
 
-            if (colCount > 20) { // 日別など
-                fontSizeTh = '8px';
-                fontSizeTd = '7.5px';
-                paddingY = '3px';
-                paddingX = '4px';
-                minWidthTh = '45px';
-                nameWidth = '220px';
-            } else if (colCount > 10) { // 週別・月別など
-                fontSizeTh = '10px';
-                fontSizeTd = '9px';
-                paddingY = '5px';
-                paddingX = '6px';
-                minWidthTh = '75px';
-                nameWidth = '280px';
+            if (colCount > 20) { // 日別や内訳の列数が多い場合
+                fontSizeTh = '7.5px';
+                fontSizeTd = '7.0px';
+                paddingY = '2px';
+                paddingX = '3px';
+                minWidthTh = '28px';
+                nameWidth = activeTab === 'trend' ? '160px' : '90px';
+            } else if (colCount > 10) { // 週別・月別・内訳の中程度
+                fontSizeTh = '9px';
+                fontSizeTd = '8.5px';
+                paddingY = '4px';
+                paddingX = '5px';
+                minWidthTh = '55px';
+                nameWidth = activeTab === 'trend' ? '210px' : '100px';
             }
             
             // テーブルヘッダーの複製とスタイル整形
@@ -2756,7 +2857,15 @@
                 } else {
                     th.style.minWidth = minWidthTh;
                     th.style.textAlign = 'center';
-                    th.style.whiteSpace = 'nowrap';
+                    // 内訳タブで列数が多い場合はヘッダーの折り返しを許可して横幅を圧縮
+                    if (activeTab === 'breakdown' && colCount > 6) {
+                        th.style.whiteSpace = 'normal';
+                        th.style.wordBreak = 'break-all';
+                        th.style.width = minWidthTh;
+                        th.style.maxWidth = (parseInt(minWidthTh) * 1.8) + 'px';
+                    } else {
+                        th.style.whiteSpace = 'nowrap';
+                    }
                 }
             });
 
@@ -2789,6 +2898,12 @@
                         td.style.fontWeight = isTotal ? '900' : 'bold';
                         td.style.textAlign = 'right';
                         td.style.whiteSpace = 'nowrap';
+                        // 内訳タブで列数が多い場合はセルの幅も制限して圧縮
+                        if (activeTab === 'breakdown' && colCount > 6) {
+                            td.style.minWidth = minWidthTh;
+                            td.style.width = minWidthTh;
+                            td.style.maxWidth = (parseInt(minWidthTh) * 1.8) + 'px';
+                        }
                     }
                 });
             });
@@ -2798,17 +2913,18 @@
             tableContainer.appendChild(newTable);
             printArea.appendChild(tableContainer);
 
-            // AI分析カードをクローンして追加
+            // AI分析カードをクローンして追加 (下部1/3に綺麗にレイアウト)
             const aiCard = activeTab === 'trend' ? document.getElementById('ai-analysis-card') : document.getElementById('breakdown-ai-card');
             if (aiCard && aiCard.style.display !== 'none') {
                 const newAiCard = aiCard.cloneNode(true);
-                newAiCard.style.marginTop = '30px';
+                newAiCard.style.marginTop = '0px'; // テーブル側のmarginBottom(20px)と合わせて間隔を最適化
                 newAiCard.style.width = '100%';
                 newAiCard.style.boxSizing = 'border-box';
                 newAiCard.style.background = 'linear-gradient(to bottom right, #f0fdf4, #ffffff)';
                 newAiCard.style.border = '1px solid rgba(16, 185, 129, 0.2)';
                 newAiCard.style.borderRadius = '24px';
-                newAiCard.style.padding = '24px';
+                newAiCard.style.padding = '22px';
+                newAiCard.style.flexShrink = '0';
                 
                 // クローン内のフォントサイズや要素のスタイルをPDF用に調整
                 newAiCard.querySelectorAll('h3').forEach(el => {
@@ -2874,8 +2990,10 @@
                     scale: 2.0,
                     useCORS: true,
                     logging: false,
-                    width: 1600,
-                    windowWidth: 1600,
+                    width: 1200,
+                    windowWidth: 1200,
+                    height: 1700,
+                    windowHeight: 1700,
                     scrollX: 0,
                     scrollY: 0,
                     x: 0,
@@ -2885,32 +3003,13 @@
                 const imgData = canvas.toDataURL('image/jpeg', 0.98);
                 const { jsPDF } = window.jspdf || window;
                 const pdf = new jsPDF({
-                    orientation: 'landscape',
+                    orientation: 'portrait',
                     unit: 'mm',
                     format: 'a4'
                 });
 
-                const a4Width = 297;
-                const a4Height = 210;
-                const canvasRatio = canvas.width / canvas.height;
-                const a4Ratio = a4Width / a4Height;
-
-                let w, h, x, y;
-                if (canvasRatio > a4Ratio) {
-                    // Canvas is wider than A4 ratio -> fit to width
-                    w = a4Width;
-                    h = a4Width / canvasRatio;
-                    x = 0;
-                    y = (a4Height - h) / 2; // Center vertically
-                } else {
-                    // Canvas is taller than A4 ratio -> fit to height
-                    h = a4Height;
-                    w = a4Height * canvasRatio;
-                    x = (a4Width - w) / 2; // Center horizontally
-                    y = 0;
-                }
-
-                pdf.addImage(imgData, 'JPEG', x, y, w, h);
+                // キャンバスのアスペクト比がA4縦(1200x1700)と完全に一致しているため、全面に綺麗に配置できます
+                pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
                 pdf.save('実績分析レポート_' + new Date().toISOString().substring(0, 10) + '.pdf');
 
                 // 後処理

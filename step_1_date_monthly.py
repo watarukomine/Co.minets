@@ -1,15 +1,48 @@
 # -*- coding: utf-8 -*-
+import sys
+import os
+import json
 import time
+import calendar
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import sys
 
-START_DATE = "2023/04/01"
-END_DATE = datetime.now().strftime("%Y/%m/%d")
+def get_target_period(target_arg=None):
+    # デフォルトは前月
+    now = datetime.now()
+    if now.month == 1:
+        default_year = now.year - 1
+        default_month = 12
+    else:
+        default_year = now.year
+        default_month = now.month - 1
+        
+    target = f"{default_year}/{default_month:02d}"
+    
+    if target_arg:
+        arg = target_arg.strip()
+        arg = arg.replace("-", "/")
+        parts = arg.split("/")
+        if len(parts) == 2 and len(parts[0]) == 4 and parts[1].isdigit():
+            y = int(parts[0])
+            m = int(parts[1])
+            if 1 <= m <= 12:
+                target = f"{y}/{m:02d}"
+            else:
+                print(f"[警告] 月の指定が不正です: {arg}。デフォルトの前月を使用します。")
+        else:
+            print(f"[警告] 引数のフォーマットが不正です: {arg}。'YYYY/MM' 形式で指定してください。デフォルトの前月を使用します。")
+            
+    year, month = map(int, target.split("/"))
+    _, last_day = calendar.monthrange(year, month)
+    
+    start_date = f"{year}/{month:02d}/01"
+    end_date = f"{year}/{month:02d}/{last_day:02d}"
+    return start_date, end_date
 
 def ensure_dashboard_open(driver, target_dashboard="EGZ010"):
     # 1. 既に開いているか確認
@@ -213,8 +246,25 @@ def ensure_dashboard_open(driver, target_dashboard="EGZ010"):
     print("[エラー] ダッシュボードの読み込みがタイムアウトしました。")
     return False
 
-def run_full_date_set(is_auto=False):
-    print(f"Connecting to Edge... Full Date Set: {START_DATE} ~ {END_DATE}")
+def run_monthly_date_set(target_arg=None, is_auto=False):
+    start_date, end_date = get_target_period(target_arg)
+    print(f"Connecting to Edge... Target Month Set: {start_date} ~ {end_date}")
+    
+    # 対象年月を一時ファイルに保存
+    try:
+        target_info = {
+            "year": int(start_date.split("/")[0]),
+            "month": int(start_date.split("/")[1]),
+            "start_date": start_date,
+            "end_date": end_date
+        }
+        json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "target_month.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(target_info, f, ensure_ascii=False, indent=2)
+        print(f"  [情報] 対象年月情報を target_month.json に保存しました: {start_date} ~ {end_date}")
+    except Exception as e:
+        print(f"  [警告] 対象年月の保存に失敗しました: {e}")
+        
     options = Options()
     options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
     
@@ -232,7 +282,7 @@ def run_full_date_set(is_auto=False):
         
     # 自動ログインおよびダッシュボード遷移処理を含めてダッシュボードを確保する
     found = ensure_dashboard_open(driver, "EGZ010")
-    
+            
     if found:
         if not is_auto:
             print("\n------------------------------------------------------------")
@@ -262,7 +312,7 @@ def run_full_date_set(is_auto=False):
                 print("[エラー] ダッシュボードが見つかりませんでした。")
                 sys.exit(1)
 
-        print("Dashboard found. Starting full sequence...")
+        print("Dashboard found. Starting date sequence...")
         res = driver.execute_script(f"""
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const walk = (n, text) => {{
@@ -273,23 +323,16 @@ def run_full_date_set(is_auto=False):
                 return null;
             }};
 
-            const doFullSet = async () => {{
-                // 1. Expand
+            const doMonthlySet = async () => {{
+                // 1. Expand Panel
                 const header = walk(document.body, 'コントロール');
                 if(header && header.getAttribute('aria-expanded')==='false') {{
                     header.click();
                     await sleep(3000);
                 }}
 
-                // 2. Set Start
-                const findAndSet = async (oldVal, newVal) => {{
-                    const find = n => {{
-                        if(!n) return null;
-                        if(n.tagName === 'INPUT' && n.value && n.value.includes('20')) return n; // Match any date-like input
-                        if(n.shadowRoot) {{ let r = find(n.shadowRoot); if(r) return r; }}
-                        let c = n.firstChild; while(c){{ let r = find(c); if(r) return r; c = c.nextSibling; }}
-                        return null;
-                    }};
+                // 2. Set Dates
+                const findAndSet = async () => {{
                     const inputs = [];
                     const walkAll = n => {{
                         if(!n) return;
@@ -300,14 +343,15 @@ def run_full_date_set(is_auto=False):
                     walkAll(document.body);
                     
                     if(inputs.length >= 2) {{
-                        // Start
+                        // Start Date
                         inputs[0].focus(); inputs[0].click(); inputs[0].value = '';
-                        document.execCommand('insertText', false, '{START_DATE}');
+                        document.execCommand('insertText', false, '{start_date}');
                         inputs[0].dispatchEvent(new Event('change', {{bubbles:true}}));
                         await sleep(2000);
-                        // End
+                        
+                        // End Date
                         inputs[1].focus(); inputs[1].click(); inputs[1].value = '';
-                        document.execCommand('insertText', false, '{END_DATE}');
+                        document.execCommand('insertText', false, '{end_date}');
                         inputs[1].dispatchEvent(new Event('change', {{bubbles:true}}));
                         await sleep(2000);
                         return true;
@@ -317,26 +361,31 @@ def run_full_date_set(is_auto=False):
                 
                 const success = await findAndSet();
 
-                // 3. Collapse
-                if(header && header.getAttribute('aria-expanded')=='true') {{
+                // 3. Collapse Panel
+                if(header && header.getAttribute('aria-expanded')==='true') {{
                     header.click();
                     await sleep(2000);
                 }}
                 return success;
             }};
-            return doFullSet();
+            return doMonthlySet();
         """)
-        print(f"Full Date Set Result: {res}")
+        print(f"Date Set Result: {res}")
         time.sleep(5)
-        driver.save_screenshot("step_1_final_full_dates.png")
+        driver.save_screenshot("step_1_monthly_dates.png")
         driver.switch_to.default_content()
     else:
-        print("Dashboard not found.")
+        print("[エラー] QuickSightダッシュボードが見つかりませんでした。ダッシュボードを開いた状態で実行してください。")
+        sys.exit(1)
 
 if __name__ == "__main__":
     is_auto = False
+    target_month_arg = None
+    
     for arg in sys.argv[1:]:
         if arg.lower() == "auto":
             is_auto = True
-            break
-    run_full_date_set(is_auto)
+        else:
+            target_month_arg = arg
+            
+    run_monthly_date_set(target_month_arg, is_auto)

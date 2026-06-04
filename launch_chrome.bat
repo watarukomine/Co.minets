@@ -3,7 +3,7 @@ set "CHROME_PATH_1=C:\Program Files\Google\Chrome\Application\chrome.exe"
 set "CHROME_PATH_2=C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 set "CHROME_PATH_3=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 
-set "USER_DATA=%~dp0chrome_profile_rpa"
+set "USER_DATA=%LOCALAPPDATA%\chrome_profile_rpa"
 set "URL=https://report.tmp-one.com/portal#"
 
 if exist "%CHROME_PATH_1%" (

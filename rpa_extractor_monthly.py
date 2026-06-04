@@ -13,9 +13,20 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException, StaleElementReferenceException
 import zipfile
 import json
+import io
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Fallback for python versions that don't support reconfigure
+        import sys as _sys
+        _sys.stdout = io.TextIOWrapper(_sys.stdout.buffer, encoding='utf-8')
+        _sys.stderr = io.TextIOWrapper(_sys.stderr.buffer, encoding='utf-8')
 
 
 # ==========================================
@@ -81,7 +92,7 @@ if os.path.exists(exclude_json_path):
         with open(exclude_json_path, 'r', encoding='utf-8') as f:
             exclude_data = json.load(f)
             EXCLUDE_COMBINATIONS = [(item['route'], item['sales_class']) for item in exclude_data]
-            print(f"  [情報] always_zero_combinations.json から {len(EXCLUDE_COMBINATIONS)} 件 of 除外組み合わせをロードしました。")
+            print(f"  [情報] always_zero_combinations.json から {len(EXCLUDE_COMBINATIONS)} 件の除外組み合わせをロードしました。")
     except Exception as e:
         print(f"  [警告] always_zero_combinations.json のロードに失敗しました: {e}")
 
@@ -111,15 +122,17 @@ if not EXCLUDE_COMBINATIONS:
     ]
 
 
-# --- 変更点：保存先をローカルCドライブにする ---
-DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "rpa_downloads")
-# --- 追加：最終保存先をXドライブにする ---
-X_DEST_DIR = r"X:\全社共有\371神奈川\営業企画部\01_営業総括室\01_総括G\18_DX\Antigravity\異常値Search 実績分析UI\extracted_data"
+# --- 保存先（月次一時用） ---
+DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "rpa_downloads_temp")
+X_DEST_DIR = r"X:\全社共有\371神奈川\営業企画部\01_営業総括室\01_総括G\18_DX\Antigravity\異常値Search 実績分析UI\extracted_data_temp"
+X_FINAL_DIR = r"X:\全社共有\371神奈川\営業企画部\01_営業総括室\01_総括G\18_DX\Antigravity\異常値Search 実績分析UI\extracted_data"
 
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 if not os.path.exists(X_DEST_DIR):
     os.makedirs(X_DEST_DIR)
+if not os.path.exists(X_FINAL_DIR):
+    os.makedirs(X_FINAL_DIR)
 
 # ==========================================
 # ユーティリティ
@@ -141,6 +154,115 @@ def wait_for_disk_space(threshold_gb=3.5):
         print(f"Fileforceの動作には {threshold_gb} GB 以上の空きが必要です。")
         print("キャッシュをクリアするか、不要なファイルを削除してください。回復を待機中...")
         time.sleep(30)
+
+def check_already_extracted_in_dest(dest_zip_path, target_year, target_month):
+    """
+    最終保存先のZIPファイル内のCSVを読み込み、指定された対象年月(YYYY-MM)のデータが既に存在するかチェックする
+    """
+    if not os.path.exists(dest_zip_path):
+        return False
+        
+    target_prefix = f"{target_year:04d}-{target_month:02d}-"
+    target_prefix_slash = f"{target_year:04d}/{target_month:02d}/"
+    
+    try:
+        with zipfile.ZipFile(dest_zip_path, 'r') as z:
+            csv_filename = z.namelist()[0]
+            with z.open(csv_filename) as f:
+                content = f.read().decode('utf-8-sig')
+                if target_prefix in content or target_prefix_slash in content:
+                    return True
+    except Exception as e:
+        print(f"    [警告] ZIPファイル {os.path.basename(dest_zip_path)} の中身チェック中にエラーが発生しました: {e}")
+        
+    return False
+
+def wait_for_data_load(driver, old_table=None, timeout=15):
+    """
+    フィルター適用後、データがロードされるのを待機する。
+    データなしメッセージが検出された場合は 'ZERO_DATA' を返し、
+    テーブルデータが正常に表示された場合は 'DATA_PRESENT' を返す。
+    タイムアウトした場合は 'TIMEOUT' を返す。
+    """
+    start_time = time.time()
+    
+    # 1. 旧テーブルが指定されている場合、それがStale（DOMから離脱）するのを待つ
+    if old_table:
+        try:
+            # ページ遷移・ロードが始まるまでに少しラグがあるため、
+            # 最大5秒間、旧テーブルが無効（stale）になるのを待機する
+            WebDriverWait(driver, 5).until(EC.staleness_of(old_table))
+            print("    [情報] 旧テーブル要素の消失（リロード開始）を確認しました。")
+        except TimeoutException:
+            # タイムアウトした場合は、すでにロード完了しているか、データ変更がなく更新が発生しなかったとみなす
+            print("    [情報] 旧テーブル要素の消失が確認できませんでした（更新なし、またはすでに完了）。")
+        except Exception as e:
+            print(f"    [情報] 旧テーブル要素の監視中に例外が発生しました（無視して進みます）: {e}")
+
+    # Shadow DOMも含めてページ全体から「データなし」系の文言を検索するJS
+    check_zero_data_js = """
+    function hasZeroDataText(root) {
+        const targets = [
+            '表示するデータはありません',
+            '表示するデータがありません',
+            '表示データはありません',
+            '表示データがありません',
+            'データがありません',
+            'データはありません',
+            'データ無し',
+            'データなし',
+            'ビジュアルのデータが見つかりません',
+            'データが見つかりません',
+            'No data'
+        ];
+        let found = false;
+        const walk = n => {
+            if(!n || found) return;
+            let t = '';
+            try {
+                t = (n.nodeType === 3 ? n.textContent : (n.nodeType === 1 ? (n.innerText || '') : ''));
+                if (t) {
+                    t = t.trim();
+                    for (let target of targets) {
+                        if (t.includes(target)) {
+                            if (n.nodeType === 3 || n.children.length === 0) {
+                                found = true;
+                                return;
+                            }
+                        }
+                    }
+                }
+            } catch(e) {}
+            if(n.shadowRoot) walk(n.shadowRoot);
+            let c = n.firstChild;
+            while(c) {
+                walk(c);
+                c = c.nextSibling;
+            }
+        };
+        walk(root);
+        return found;
+    }
+    return hasZeroDataText(document.body);
+    """
+
+    while time.time() - start_time < timeout:
+        try:
+            # 1. 「データなし」メッセージの検出 (Shadow DOM対応)
+            is_zero = driver.execute_script(check_zero_data_js)
+            if is_zero:
+                return "ZERO_DATA"
+                
+            # 2. メニューオプションボタンがすでに見える状態かチェック
+            menu_btns = driver.find_elements(By.XPATH, "//*[contains(@aria-label, 'メニューオプション') or contains(@aria-label, 'Visual menu')]")
+            for btn in menu_btns:
+                if btn.is_displayed():
+                    return "DATA_PRESENT"
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return "TIMEOUT"
+
 
 FILTER_INDEX = {
     "売上/粗利": 0,
@@ -565,59 +687,105 @@ def set_quicksight_filter(driver, filter_name, target_value):
         time.sleep(0.5)
     except:
         pass
-        pass
 
 def export_csv(driver):
     try:
-        # 表（ビジュアル）を探してスクロール
-        table = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]"))
-        )
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", table)
-        time.sleep(1)
+        table = None
+        for attempt in range(3):
+            try:
+                table = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]"))
+                )
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", table)
+                time.sleep(1)
+                break
+            except StaleElementReferenceException:
+                print(f"    [情報] テーブル取得中に要素の差し替えが発生しました。リトライします。 (試行 {attempt + 1}/3)")
+                time.sleep(1)
         
-        # ホバーを試行（メニューボタンが出るまで最大3回）
+        if not table:
+            raise Exception("テーブル要素の取得に失敗しました。")
+
         menu_btn = None
         for i in range(3):
-            # 表を一度クリックしてフォーカスを当てる（1回目のみ）
-            if i == 0:
+            try:
+                # table が stale になっていないか確認し、stale なら再取得する
                 try:
-                    ActionChains(driver).move_to_element_with_offset(table, 10, 10).click().perform()
-                except:
-                    pass
-            
-            # 表の右上にマウスを移動（メニューが出やすい場所）
-            ActionChains(driver).move_to_element_with_offset(table, 10, 10).perform()
-            time.sleep(2)
+                    _ = table.is_displayed()
+                except StaleElementReferenceException:
+                    print("    [情報] ホバー前にテーブル要素が古くなったため、再取得します。")
+                    table = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]"))
+                    )
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", table)
+                    time.sleep(1)
+
+                if i == 0:
+                    try:
+                        ActionChains(driver).move_to_element_with_offset(table, 10, 10).click().perform()
+                    except:
+                        pass
+                
+                ActionChains(driver).move_to_element_with_offset(table, 10, 10).perform()
+                time.sleep(2)
+                
+                try:
+                    menu_btns = driver.find_elements(By.XPATH, "//*[contains(@aria-label, 'メニューオプション') or contains(@aria-label, 'Visual menu')]")
+                    for btn in menu_btns:
+                        if btn.is_displayed():
+                            menu_btn = btn
+                            break
+                    if menu_btn:
+                        break
+                except StaleElementReferenceException:
+                    print("    [情報] ボタン検索中に要素の差し替えが発生しました。リトライします。")
+            except StaleElementReferenceException:
+                print("    [情報] ホバーループ中に要素の差し替えが発生しました。リトライします。")
+                time.sleep(1)
+            except Exception as e:
+                print(f"    [情報] ホバーループ内エラー: {e}")
             
             try:
-                # メニューボタンを検索
-                menu_btns = driver.find_elements(By.XPATH, "//*[contains(@aria-label, 'メニューオプション') or contains(@aria-label, 'Visual menu')]")
-                for btn in menu_btns:
-                    if btn.is_displayed():
-                        menu_btn = btn
-                        break
-                if menu_btn:
-                    break
+                ActionChains(driver).move_by_offset(-100, -100).perform()
             except:
                 pass
-            
-            # ダメなら一度別の場所（画面左上など）にマウスを逃がしてリトライ
-            ActionChains(driver).move_by_offset(-100, -100).perform()
             time.sleep(1)
         
         if not menu_btn:
              print("    [情報] メインメニューボタンが表示されませんでした。実績0件の可能性があります。")
              return "ZERO_DATA"
 
-        ActionChains(driver).move_to_element(menu_btn).click().perform()
+        # メニューボタンをクリック
+        for attempt in range(3):
+            try:
+                ActionChains(driver).move_to_element(menu_btn).click().perform()
+                break
+            except StaleElementReferenceException:
+                print(f"    [情報] メニューボタンのクリック中に要素が古くなりました。再取得します。(試行 {attempt + 1}/3)")
+                menu_btns = driver.find_elements(By.XPATH, "//*[contains(@aria-label, 'メニューオプション') or contains(@aria-label, 'Visual menu')]")
+                menu_btn = None
+                for btn in menu_btns:
+                    if btn.is_displayed():
+                        menu_btn = btn
+                        break
+                if not menu_btn:
+                    raise Exception("再取得したメニューボタンが見つかりません。")
+                time.sleep(1)
+        
         time.sleep(2)
 
-        # CSVエクスポートボタンを探す
-        csv_btn = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, "//li[contains(@class, 'MuiMenuItem') and (contains(text(), 'CSV') or contains(text(), 'エクスポート'))]"))
-        )
-        ActionChains(driver).move_to_element(csv_btn).click().perform()
+        # CSVボタンをクリック
+        csv_btn = None
+        for attempt in range(3):
+            try:
+                csv_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, "//li[contains(@class, 'MuiMenuItem') and (contains(text(), 'CSV') or contains(text(), 'エクスポート'))]"))
+                )
+                ActionChains(driver).move_to_element(csv_btn).click().perform()
+                break
+            except StaleElementReferenceException:
+                print(f"    [情報] CSVボタンのクリック中に要素が古くなりました。リトライします。(試行 {attempt + 1}/3)")
+                time.sleep(1)
         
         print("    通知待ち: 「CSV の準備ができました。」を待機中...")
         try:
@@ -648,7 +816,32 @@ def export_csv(driver):
 # ==========================================
 
 def main():
-    print("【TMP-ONE データ抽出ループシステム (3日前の安定版復元・Cドライブ保存版)】")
+    print("【TMP-ONE 月次差分データ抽出ループシステム (一時フォルダ保存版)】")
+
+    # 対象年月の読み込み
+    target_year = None
+    target_month = None
+    target_month_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), "target_month.json")
+    if os.path.exists(target_month_json):
+        try:
+            with open(target_month_json, "r", encoding="utf-8") as f:
+                target_info = json.load(f)
+                target_year = target_info.get("year")
+                target_month = target_info.get("month")
+                print(f"  [設定] 対象年月をロードしました: {target_year}/{target_month:02d}")
+        except Exception as e:
+            print(f"  [警告] target_month.json のロードに失敗しました: {e}")
+
+    if not target_year or not target_month:
+        # フォールバック: 現在の日付から1ヶ月前を計算
+        now = datetime.now()
+        if now.month == 1:
+            target_year = now.year - 1
+            target_month = 12
+        else:
+            target_year = now.year
+            target_month = now.month - 1
+        print(f"  [設定] 対象年月を自動決定しました (前月): {target_year}/{target_month:02d}")
 
     edge_options = Options()
     edge_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
@@ -705,18 +898,26 @@ def main():
     success_count = 0
     skip_count = 0
     fail_count = 0
+    failed_patterns = []
 
     for amount in AMOUNT_TYPES:
+        amount_changed = False
         try:
             set_quicksight_filter(driver, "売上/粗利", amount)
+            amount_changed = True
         except Exception as e:
             print(f"  [エラー] 金額種別切替失敗: {e}")
 
         for route in ROUTES_ALL:
-            try:
-                set_quicksight_filter(driver, "ルート", route)
-            except Exception as e:
-                print(f"  [エラー] ルート切替失敗: {e}")
+            route_changed = False
+            if amount_changed:
+                try:
+                    set_quicksight_filter(driver, "ルート", route)
+                    route_changed = True
+                except Exception as e:
+                    print(f"  [エラー] ルート切替失敗: {e}")
+            else:
+                print(f"  [警告] 金額種別切替に失敗しているため、ルート {route} の切替をスキップします。")
 
             for sc in SALES_CLASSES_ALL:
                 wait_for_disk_space(threshold_gb=3.5)
@@ -726,16 +927,19 @@ def main():
                 target_filename = f"【{amount}】{route}_{sc_fname}.csv"
                 target_path = os.path.join(DOWNLOAD_DIR, target_filename)
 
-                # Xドライブに既に存在するかチェック（CSVまたはZIP）
+                # 一時フォルダ（extracted_data_temp）および最終フォルダ（extracted_data）に既に存在するかチェック
                 final_path_csv = os.path.join(X_DEST_DIR, target_filename)
                 final_path_zip = final_path_csv.replace(".csv", ".zip")
-                
                 final_path_zero = os.path.join(X_DEST_DIR, f"[ZERO_DATA]{target_filename}")
+                
+                dest_zip_name = target_filename.replace(".csv", ".zip")
+                dest_zip_path = os.path.join(X_FINAL_DIR, dest_zip_name)
+                dest_zero_path = os.path.join(X_FINAL_DIR, f"[ZERO_DATA]{target_filename}")
                 
                 # 常にデータなしとなる除外パターンのチェック
                 if (route, sc) in EXCLUDE_COMBINATIONS:
                     print(f"  [除外スキップ] 常にデータなしとなる組み合わせのためスキップ: {route} - {sc}")
-                    if not os.path.exists(final_path_zero):
+                    if not os.path.exists(final_path_zero) and not os.path.exists(dest_zero_path):
                         try:
                             with open(final_path_zero, 'w', encoding='utf-8') as f:
                                 f.write(f"Zero data (statically excluded) at {datetime.now().isoformat()}")
@@ -748,9 +952,30 @@ def main():
 
                 if os.path.exists(final_path_csv) or os.path.exists(final_path_zip) or os.path.exists(final_path_zero):
                     status = "CSV" if os.path.exists(final_path_csv) else ("ZIP" if os.path.exists(final_path_zip) else "ZERO_DATA")
-                    print(f"  [スキップ] 既にXドライブに存在します({status}): {target_filename}")
+                    print(f"  [スキップ] 既に一時フォルダに存在します({status}): {target_filename}")
                     skip_count += 1
                     success_count += 1
+                    continue
+
+                if os.path.exists(dest_zero_path):
+                    print(f"  [スキップ] 既に最終フォルダにゼロデータマーカーが存在します: {target_filename}")
+                    skip_count += 1
+                    success_count += 1
+                    continue
+
+                if check_already_extracted_in_dest(dest_zip_path, target_year, target_month):
+                    print(f"  [スキップ] 既に最終フォルダのZIPに当月データが含まれています ({target_year}/{target_month:02d}): {target_filename}")
+                    skip_count += 1
+                    success_count += 1
+                    continue
+
+                if not (amount_changed and route_changed):
+                    print(f"  [エラースキップ] フィルター切り替えに失敗しているため、抽出をスキップします: {target_filename}")
+                    fail_count += 1
+                    failed_patterns.append({
+                        "pattern": target_filename,
+                        "reason": "売上/粗利またはルートのフィルター切り替え失敗のため安全にスキップされました。"
+                    })
                     continue
 
                 print(f"\n{'='*60}")
@@ -758,9 +983,26 @@ def main():
                 print(f"{'='*60}")
 
                 try:
+                    old_table = None
+                    try:
+                        old_table = driver.find_element(By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]")
+                    except:
+                        pass
+
                     set_quicksight_filter(driver, "販売区分", sc)
-                    print("  データ計算待機 (8s)...")
-                    time.sleep(8)
+                    print("  データロード待機中...")
+                    load_status = wait_for_data_load(driver, old_table=old_table, timeout=15)
+                    
+                    if load_status == "ZERO_DATA":
+                        print("  [情報] 画面に「データなし」を検出しました。実績0件として処理します。")
+                        try:
+                            with open(final_path_zero, 'w', encoding='utf-8') as f:
+                                f.write(f"Zero data (detected on UI) at {datetime.now().isoformat()}")
+                            print(f"  ✓ マーカーファイルを作成しました: [ZERO_DATA]{target_filename}")
+                        except Exception as e:
+                            print(f"  [警告] マーカーファイルの作成に失敗しました: {e}")
+                        success_count += 1
+                        continue
 
                     res = export_csv(driver)
                     if res == True:
@@ -770,7 +1012,6 @@ def main():
                         downloaded = False
                         
                         while time.time() - start_time < timeout:
-                            # 「日別実績_*.csv」または「*.crdownload」を探す
                             all_files = glob.glob(os.path.join(DOWNLOAD_DIR, "*"))
                             new_csvs = glob.glob(os.path.join(DOWNLOAD_DIR, "日別実績_*.csv"))
                             crdownloads = glob.glob(os.path.join(DOWNLOAD_DIR, "*.crdownload"))
@@ -778,11 +1019,9 @@ def main():
                             if crdownloads:
                                 print(f"    [待機] ダウンロード進行中... ({len(crdownloads)}個の未完了ファイル)")
                             elif new_csvs:
-                                # 最新のCSVを取得
                                 latest_file = max(new_csvs, key=os.path.getctime)
                                 print(f"    [発見] ターゲット候補: {os.path.basename(latest_file)}")
                                 
-                                # ダウンロード完了（ファイルサイズが安定）を待つ
                                 size_before = -1
                                 retry_stable = 0
                                 while retry_stable < 10:
@@ -793,23 +1032,19 @@ def main():
                                     time.sleep(1)
                                     retry_stable += 1
                                 
-                                # 正式な名前にリネームして移動
                                 try:
                                     if os.path.exists(target_path):
                                         os.remove(target_path)
                                     os.rename(latest_file, target_path)
                                     
-                                    # --- 修正：ZIP圧縮してXドライブへ移動 ---
+                                    # ZIP圧縮して一時保存先へ移動
                                     zip_path = target_path.replace(".csv", ".zip")
                                     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                                         zf.write(target_path, arcname=target_filename)
                                     
-                                    # 元のCSVは削除してCドライブを空ける
                                     os.remove(target_path)
-                                    
-                                    # ZIPをXドライブへ移動
                                     shutil.move(zip_path, final_path_zip)
-                                    print(f"  ✓ ZIP圧縮してXドライブへ移動完了: {os.path.basename(final_path_zip)}")
+                                    print(f"  ✓ ZIP圧縮して一時保存先へ移動完了: {os.path.basename(final_path_zip)}")
                                     
                                     downloaded = True
                                     break
@@ -825,6 +1060,10 @@ def main():
                         else:
                             print("  [警告] ファイルの書き出しが確認できませんでした。")
                             fail_count += 1
+                            failed_patterns.append({
+                                "pattern": target_filename,
+                                "reason": "CSVエクスポートは押せましたが、ダウンロード完了が確認できませんでした（タイムアウト）。"
+                            })
                         
                         if downloaded:
                             success_count += 1
@@ -835,14 +1074,41 @@ def main():
                         success_count += 1
                     else:
                         fail_count += 1
+                        failed_patterns.append({
+                            "pattern": target_filename,
+                            "reason": "エクスポートボタンやメニューオプションが表示されない等の操作失敗です。"
+                        })
                 except Exception as e:
                     print(f"  エラー: {e}")
                     fail_count += 1
+                    failed_patterns.append({
+                        "pattern": target_filename,
+                        "reason": f"予期せぬ例外エラーが発生しました: {e}"
+                    })
                     ActionChains(driver).send_keys(Keys.ESCAPE).perform()
                     time.sleep(1)
 
     print(f"\n{'='*60}")
     print(f"完了！ 成功(込スキップ): {success_count} / 失敗: {fail_count} / 合計: {total_expected}")
+    
+    report_data = {
+        "target_year": target_year,
+        "target_month": target_month,
+        "timestamp": datetime.now().isoformat(),
+        "total_expected": total_expected,
+        "success_count": success_count,
+        "skip_count": skip_count,
+        "fail_count": fail_count,
+        "failed_patterns": failed_patterns
+    }
+    report_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extraction_report.json")
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+        print(f"  ✓ 抽出レポートを保存しました: {report_path}")
+    except Exception as e:
+        print(f"  [警告] 抽出レポートの保存に失敗しました: {e}")
+        
     driver.quit()
 
 if __name__ == '__main__':

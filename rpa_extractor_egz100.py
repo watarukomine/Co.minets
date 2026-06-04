@@ -36,10 +36,10 @@ TARGET_DASHBOARD = "EGZ100"
 TARGET_TAB = "⑤販売台数データ"
 
 # Point to local C: drive to bypass Fileforce sync/cache issues
-DOWNLOAD_DIR = r"C:\Users\00137012\Desktop\rpa_downloads_egz100"
+DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "rpa_downloads_egz100")
 USER_DATA_DIR = os.path.join(os.path.expanduser("~"), ".tmp_one_selenium_profile_2")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-ARTIFACT_DIR = r"C:\Users\00137012\.gemini\antigravity\brain\c42f2c71-f35d-4389-9e30-17ff8c173dcb"
+ARTIFACT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def generate_months(start_str, end_str):
     start_y, start_m = map(int, start_str.split('/'))

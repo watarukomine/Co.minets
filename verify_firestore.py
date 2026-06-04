@@ -15,6 +15,20 @@ with open("verify_out.txt", "w", encoding="utf-8") as f:
         data = res.json()
         fields = data.get("fields", {})
         c = fields.get("c", {}).get("arrayValue", {}).get("values", [])
+        p = fields.get("p", {}).get("arrayValue", {}).get("values", [])
+        c_ext = fields.get("c_ext", {}).get("arrayValue", {}).get("values", [])
+        p_ext = fields.get("p_ext", {}).get("arrayValue", {}).get("values", [])
+        
         f.write(f"c length: {len(c)}\n")
+        f.write(f"p length: {len(p)}\n")
+        f.write(f"c_ext length: {len(c_ext)}\n")
+        f.write(f"p_ext length: {len(p_ext)}\n")
+        
+        if c_ext:
+            c_ext_tail = [v.get("doubleValue") for v in c_ext[:10]]
+            f.write(f"c_ext head (first 10): {c_ext_tail}\n")
     else:
         f.write(res.text + "\n")
+
+
+

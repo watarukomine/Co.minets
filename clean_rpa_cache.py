@@ -11,8 +11,14 @@ def clean_cache():
         "chrome_profile_rpa",
         "playwright_profile",
         "__pycache__",
-        "downloads"  # New target: 12GB+ of CSV files found here
+        "downloads"
     ]
+    
+    # ローカルのAppData内のプロファイルも削除対象に加える
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        target_dirs.append(os.path.join(local_appdata, "edge_profile_rpa"))
+        target_dirs.append(os.path.join(local_appdata, "chrome_profile_rpa"))
     
     total_freed = 0
     

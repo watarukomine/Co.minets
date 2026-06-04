@@ -1,7 +1,7 @@
 @echo off
 pushd "%~dp0"
 
-set "dst=C:\Users\00137012\Desktop\rpa_downloads"
+set "dst=%USERPROFILE%\Desktop\rpa_downloads"
 if not exist "%dst%" mkdir "%dst%"
 
 echo --- Moving RPA Downloads to Local Desktop ---

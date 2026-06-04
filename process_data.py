@@ -8,9 +8,21 @@ import zipfile
 import io
 import logging
 
+import sys
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        import sys as _sys
+        _sys.stdout = io.TextIOWrapper(_sys.stdout.buffer, encoding='utf-8')
+        _sys.stderr = io.TextIOWrapper(_sys.stderr.buffer, encoding='utf-8')
+
 # ログ設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
 
 # 共通設定
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -94,7 +106,7 @@ def sync_to_cloud_iterative(metadata, metric, route, cls, branches, force_full=F
         requests.patch(update_time_url, json={"fields": {"updatedAt": {"stringValue": metadata["updatedAt"]}}}, headers=headers, timeout=30)
     except: pass
 
-    batch_limit = 1 # 1MB制限回避のため、1件ずつ確実に送る
+    batch_limit = 35 # 31ブランチを一括で送信できるようにサイズ制限内に調整
 
     def commit_batch(w_list):
         if not w_list: return True

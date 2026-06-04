@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>実績分析ポータル | Achievement Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        window.onerror = function(msg, url, line) {
+            console.error("Critical Error: " + msg + " at " + line);
+            return false;
+        };
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'Noto Sans JP', 'sans-serif'] },
+                    colors: { primary: '#10b981', background: '#f8fafc' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; height: 100vh; overflow: hidden; }
+        .premium-shadow { box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05), 0 20px 25px -5px rgba(0,0,0,0.03); }
+        .chip { display: inline-flex; align-items: center; background: #f0fdf4; color: #10b981; padding: 6px 14px; border-radius: 12px; font-size: 13px; font-weight: 800; margin: 4px; border: 1px solid rgba(16, 185, 129, 0.1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        #loading-overlay { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s; }
+        .list-item { transition: all 0.2s; border-left: 4px solid transparent; cursor: pointer; }
+        .list-item-selected { background: #f0fdf4; border-left-color: #10b981; color: #10b981; }
+    </style>
+</head>
+<body class="font-sans antialiased text-slate-900 text-[15px]">
+    <div id="loading-overlay">
+        <div class="w-12 h-12 border-4 border-slate-100 border-t-primary rounded-full animate-spin"></div>
+        <p class="mt-4 font-black text-xs text-slate-400 uppercase tracking-[0.2em] text-center">ポータル起動中...<span class="block text-[9px] mt-1 text-slate-300 font-medium tracking-[0.3em]">Readying Portal</span></p>
+    </div>
+
+    <div class="flex h-full w-full">
+        <!-- Sidebar -->
+        <aside class="w-80 h-full bg-white border-r border-slate-200 flex flex-col z-50">
+            <div class="p-8 border-b border-slate-50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                        <i data-lucide="bar-chart-3" class="text-white w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-black text-slate-800 tracking-tight leading-none">実績分析ポータル</h1>
+                        <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mt-0.5">Achievement Pro</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                <div class="space-y-4">
+                    <label class="text-[12px] font-black text-slate-400 tracking-wider">基本設定 <span class="text-[9px] text-slate-300 font-bold block">Base Setting</span></label>
+                    <select id="compareModeSelect" onchange="onCompareModeChange()" class="w-full p-3 bg-amber-500 text-white border border-amber-400 rounded-xl font-black outline-none cursor-pointer text-sm shadow-lg shadow-amber-500/20">
+                        <option value="normal">通常モード（当年 vs 前年）</option>
+                        <option value="period">期間比較モード</option>
+                    </select>
+                    <div id="normal-date-section">
+                        <label class="text-[10px] font-black text-slate-400 tracking-wider mb-1 block">分析期間</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="date" id="start-date" onchange="update()" class="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none text-sm">
+                            <input type="date" id="end-date" onchange="update()" class="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none text-sm">
+                        </div>
+                    </div>
+                    <div id="compare-date-section" style="display:none" class="space-y-2">
+                        <label class="text-[10px] font-black text-emerald-600 tracking-wider mb-1 block">📗 期間A（比較元）</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="date" id="compare-start-a" onchange="update()" class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-bold text-emerald-700 outline-none text-sm">
+                            <input type="date" id="compare-end-a" onchange="update()" class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-bold text-emerald-700 outline-none text-sm">
+                        </div>
+                        <label class="text-[10px] font-black text-blue-600 tracking-wider mb-1 block">📘 期間B（比較対象）</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="date" id="compare-start-b" onchange="update()" class="p-3 bg-blue-50 border border-blue-200 rounded-xl font-bold text-blue-700 outline-none text-sm">
+                            <input type="date" id="compare-end-b" onchange="update()" class="p-3 bg-blue-50 border border-blue-200 rounded-xl font-bold text-blue-700 outline-none text-sm">
+                        </div>
+                    </div>
+                    <select id="metricSelect" onchange="onMetricChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none cursor-pointer text-sm">
+                        <option value="売上">売上合計</option>
+                        <option value="粗利">粗利合計</option>
+                    </select>
+                    <select id="granularitySelect" onchange="onGranularityChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none cursor-pointer text-sm">
+                        <option value="month">月別</option>
+                        <option value="week">週別</option>
+                        <option value="day">日別</option>
+                    </select>
+                    <select id="displayModeSelect" onchange="onDisplayModeChange()" class="w-full p-3 bg-primary text-white border border-primary-100 rounded-xl font-black outline-none cursor-pointer text-sm shadow-lg shadow-primary/20">
+                        <option value="aggregated">合算グラフ表示</option>
+                        <option value="detailed">個別グラフ表示（内訳）</option>
+                    </select>
+                    <select id="unitSelect" onchange="onUnitChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 outline-none cursor-pointer text-sm">
+                        <option value="0.001">表示単位: 円</option>
+                        <option value="1" selected>表示単位: 千円</option>
+                        <option value="10">表示単位: 万円</option>
+                        <option value="1000">表示単位: 百万円</option>
+                    </select>
+                </div>
+
+                <div class="h-px bg-slate-50"></div>
+
+                <div class="space-y-6">
+                    <label class="text-[12px] font-black text-slate-400 tracking-wider">条件絞り込み <span class="text-[9px] text-slate-300 font-bold block">Filters (Multi-Select)</span></label>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-black text-slate-600">支社</span>
+                            <button onclick="togglePicker('branch')" class="px-4 py-2 bg-primary text-white text-xs font-black rounded-xl shadow-lg shadow-primary/20">＋ 選択する</button>
+                        </div>
+                        <div id="chips-branch" class="flex flex-wrap min-h-[44px] p-2 bg-slate-50 rounded-2xl border border-slate-100"></div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-black text-slate-600">ルート</span>
+                            <button onclick="togglePicker('route')" class="px-4 py-2 bg-primary text-white text-xs font-black rounded-xl shadow-lg shadow-primary/20">＋ 選択する</button>
+                        </div>
+                        <div id="chips-route" class="flex flex-wrap min-h-[44px] p-2 bg-slate-50 rounded-2xl border border-slate-100"></div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-black text-slate-600">販売区分</span>
+                            <button onclick="togglePicker('category')" class="px-4 py-2 bg-primary text-white text-xs font-black rounded-xl shadow-lg shadow-primary/20">＋ 選択する</button>
+                        </div>
+                        <div id="chips-category" class="flex flex-wrap min-h-[44px] p-2 bg-slate-50 rounded-2xl border border-slate-100"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-slate-50 bg-slate-50/20 text-center">
+                <p class="text-[8px] font-bold text-slate-300">© TOYOTA MP Analytics</p>
+            </div>
+        </aside>
+
+        <!-- Main Area -->
+        <main class="flex-1 h-full overflow-hidden flex flex-col relative bg-slate-50">
+            <header class="h-16 flex items-center justify-between px-10 bg-white border-b border-slate-100">
+                <div id="path-indicator" class="text-sm font-black text-primary bg-primary/5 px-4 py-1.5 rounded-full">
+                    起動中...
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="fetch-loader" class="hidden items-center gap-2 text-sm font-black text-primary animate-pulse">
+                        <div class="w-2 h-2 bg-primary rounded-full"></div> データ読込中... <span class="text-[10px] text-primary/50 font-normal ml-0.5">Loading Data</span>
+                    </div>
+                    <button onclick="exportCSV()" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex flex-col items-center justify-center leading-tight">
+                        <span class="text-sm font-black">CSV出力</span>
+                        <span class="text-[9px] text-slate-400 font-medium">Export CSV</span>
+                    </button>
+                    <button onclick="exportPDF()" class="px-4 py-1.5 bg-primary hover:bg-primary/95 text-white rounded-xl font-bold flex flex-col items-center justify-center leading-tight shadow-md shadow-primary/10">
+                        <span class="text-sm font-black">PDF出力</span>
+                        <span class="text-[9px] text-emerald-100 font-medium">Export PDF</span>
+                    </button>
+                </div>
+            </header>
+
+            <div id="pdf-content" class="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
+                <div class="grid grid-cols-12 gap-8">
+                    <div class="col-span-12 bg-white rounded-[3rem] p-10 premium-shadow">
+                        <div class="flex justify-between items-center mb-8">
+                            <h2 class="text-xl font-black text-slate-800 tracking-tighter">実績トレンド</h2>
+                            <div id="chart-legend" class="flex gap-4">
+                                <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-primary"></div><span class="text-xs font-black text-slate-600">当年</span></div>
+                                <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-slate-200"></div><span class="text-xs font-black text-slate-600">前年</span></div>
+                            </div>
+                        </div>
+                        <div class="h-[400px] w-full">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[3rem] p-10 premium-shadow">
+                    <h3 class="text-sm font-black text-slate-400 mb-8">データ集計テーブル <span class="text-xs text-slate-300 font-bold block uppercase mt-0.5">Table Data Summary</span></h3>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left">
+                            <thead id="tableHeader" class="border-b border-slate-100 text-xs font-black text-slate-400"></thead>
+                            <tbody id="tableBody" class="text-sm font-bold text-slate-600"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- AI Analysis Insights -->
+                <div id="ai-analysis-card" class="bg-gradient-to-br from-emerald-50/30 to-white rounded-[3rem] p-10 premium-shadow border border-emerald-500/10">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center text-primary">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800 tracking-tight">AI Insights | 自動分析見解</h3>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Automated Performance Analysis</span>
+                        </div>
+                    </div>
+                    <div id="ai-analysis-content" class="text-xs text-slate-600 leading-relaxed space-y-4">
+                        <!-- Dynamic analysis content goes here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- List Selector Modal -->
+        <div id="picker-modal" class="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/10 backdrop-blur-md hidden px-4">
+            <div class="bg-white w-full max-w-xl max-h-[85vh] rounded-[3.5rem] shadow-2xl p-12 flex flex-col">
+                <div class="flex items-center justify-between mb-8">
+                    <h3 id="picker-title" class="text-3xl font-black text-slate-800 tracking-tighter">選択リスト</h3>
+                    <button onclick="closePicker()" class="w-12 h-12 flex items-center justify-center hover:bg-slate-50 rounded-full text-slate-300"><i data-lucide="x" class="w-8 h-8"></i></button>
+                </div>
+                <input type="text" id="picker-search" oninput="filterPicker()" placeholder="名前で絞り込む..." class="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-12 text-sm font-bold outline-none mb-6">
+                <div id="picker-list" class="flex-1 overflow-y-auto custom-scrollbar space-y-1 mb-8 pr-2 min-h-[300px]"></div>
+                <div class="flex gap-3">
+                    <button onclick="selectAll()" class="flex-1 py-4 bg-slate-50 hover:bg-slate-100 rounded-2xl text-sm font-black">すべて選択 <span class="text-[10px] text-slate-400 block font-medium uppercase tracking-wider mt-0.5">Select All</span></button>
+                    <button onclick="clearAll()" class="flex-1 py-4 bg-slate-50 hover:bg-slate-100 rounded-2xl text-sm font-black text-red-400">すべて解除 <span class="text-[10px] text-red-300 block font-medium uppercase tracking-wider mt-0.5">Clear All</span></button>
+                    <button onclick="applySelection()" class="flex-[2] py-4 bg-primary text-white rounded-2xl text-sm font-black shadow-xl shadow-primary/20">選択を適用する <span class="text-[10px] text-emerald-100 block font-medium uppercase tracking-wider mt-0.5">Apply & Update</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PROJECT_ID = "cominet-8799b", DATABASE_ID = "cominets";
+        const BASE_URL = "https://firestore.googleapis.com/v1/projects/" + PROJECT_ID + "/databases/" + DATABASE_ID + "/documents";
+        let DATA_MATRIX = { branches: [], routes: [], classes: [], timeline: [], results: {} };
+        let chart = null;
+        let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "aggregated", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31" };
+        let activePicker = null, pickerItems = [], tempSelected = [];
+
+        // Universal Fetch with Timeout (Old-school approach for max compatibility)
+        function fetchWithTimeout(url, timeout = 10000) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
+                fetch(url).then(res => { clearTimeout(timer); resolve(res); }).catch(e => { clearTimeout(timer); reject(e); });
+            });
+        }
+
+        async function init() {
+            const status = document.getElementById('path-indicator');
+            setTimeout(hideLoading, 6000);
+
+            try {
+                const res = await fetchWithTimeout(BASE_URL + "/dashboard_metadata/current");
+                const data = await res.json();
+                if (!data.fields) throw new Error("Metadata empty");
+                
+                const meta = fromFirestoreValue({ mapValue: { fields: data.fields } });
+                DATA_MATRIX.branches = meta.branches || [];
+                DATA_MATRIX.routes = meta.routes || [];
+                DATA_MATRIX.classes = meta.classes || [];
+                DATA_MATRIX.timeline = meta.timeline || [];
+                
+                const kanagawa = DATA_MATRIX.branches.find(b => b.indexOf("神奈川支社") !== -1);
+                selection.branches = [kanagawa || DATA_MATRIX.branches[0] || "未選択"];
+                selection.routes = [DATA_MATRIX.routes[0] || "未選択"];
+                selection.categories = [DATA_MATRIX.classes[0] || "未選択"];
+                
+                if (DATA_MATRIX.timeline.length > 0) {
+                    selection.startDate = "2025-04-01";
+                    selection.endDate = "2026-03-31";
+                    document.getElementById('start-date').value = selection.startDate;
+                    document.getElementById('end-date').value = selection.endDate;
+                }
+                update();
+                hideLoading();
+            } catch (e) {
+                console.error(e);
+                alert("初期設定に失敗しました。再読み込みしてください。");
+                hideLoading();
+            }
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            if(overlay) overlay.style.opacity = '0';
+            setTimeout(() => { if(overlay) overlay.style.display = 'none'; }, 400);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function fromFirestoreValue(v) {
+            if (!v) return null;
+            if (v.stringValue !== undefined) return v.stringValue;
+            if (v.integerValue !== undefined) return parseInt(v.integerValue);
+            if (v.doubleValue !== undefined) return parseFloat(v.doubleValue);
+            if (v.arrayValue) return v.arrayValue.values ? v.arrayValue.values.map(fromFirestoreValue) : [];
+            if (v.mapValue) {
+                let res = {}; for (let k in v.mapValue.fields) res[k] = fromFirestoreValue(v.mapValue.fields[k]);
+                return res;
+            }
+            return null;
+        }
+
+        async function fetchAggregatedData() {
+            const { metric, branches, routes, categories } = selection;
+            const loader = document.getElementById('fetch-loader');
+            if(loader) loader.style.display = 'flex';
+
+            let combinedC = [], combinedP = [];
+            const patterns = [];
+            for (let i = 0; i < branches.length; i++) {
+                if (!branches[i] || branches[i] === "未選択") continue;
+                for (let j = 0; j < routes.length; j++) {
+                    for (let k = 0; k < categories.length; k++) {
+                        patterns.push({ b: branches[i], r: routes[j], c: categories[k] });
+                    }
+                }
+            }
+
+            const details = [];
+            try {
+                const results = [];
+                for (let i = 0; i < patterns.length; i += 10) {
+                    const chunk = patterns.slice(i, i + 10);
+                    const chunkRes = await Promise.all(chunk.map(async p => {
+                        const cacheKey = metric + "_" + p.b + "_" + p.r + "_" + p.c;
+                        if (DATA_MATRIX.results[cacheKey]) return { p, data: DATA_MATRIX.results[cacheKey] };
+                        const doc_id = (metric + "_" + p.r + "_" + p.c).replace(/\//g, "-").replace(/\s/g, "");
+                        const url = BASE_URL + "/dashboard_data/" + encodeURIComponent(doc_id) + "/branches/" + encodeURIComponent(p.b);
+                        try {
+                            const res = await fetchWithTimeout(url, 15000);
+                            if (!res.ok) return null;
+                            const d = await res.json();
+                            const f = d.fields || {};
+                            const resObj = { c: (fromFirestoreValue(f.c)||[]).concat(fromFirestoreValue(f.c_ext)||[]), p: (fromFirestoreValue(f.p)||[]).concat(fromFirestoreValue(f.p_ext)||[]) };
+                            DATA_MATRIX.results[cacheKey] = resObj;
+                            return { p, data: resObj };
+                        } catch (e) { console.error("Fetch failed", e); return null; }
+                    }));
+                    results.push(...chunkRes);
+                }
+
+                for (let i = 0; i < results.length; i++) {
+                    if (!results[i]) continue;
+                    const resObj = results[i].data;
+                    details.push({
+                        label: `${results[i].p.b} / ${results[i].p.r} / ${results[i].p.c}`,
+                        c: resObj.c,
+                        p: resObj.p
+                    });
+                    if (combinedC.length === 0) {
+                        combinedC = resObj.c.slice(); combinedP = resObj.p.slice();
+                    } else {
+                        for(let j=0; j<resObj.c.length; j++) {
+                            if(combinedC[j] !== undefined) combinedC[j] += (resObj.c[j] || 0);
+                            if(combinedP[j] !== undefined) combinedP[j] += (resObj.p[j] || 0);
+                        }
+                    }
+                }
+                return { c: combinedC, p: combinedP, details: details };
+            } finally { if(loader) loader.style.display = 'none'; }
+        }
+
+        async function update() {
+            if (selection.compareMode === 'period') {
+                return updateCompare();
+            }
+            const tl = DATA_MATRIX.timeline || [];
+            const sVal = document.getElementById('start-date').value;
+            const eVal = document.getElementById('end-date').value;
+            selection.startDate = sVal;
+            selection.endDate = eVal;
+            
+            let sIdx = 0, eIdx = tl.length - 1;
+            for(let i=0; i<tl.length; i++) { if(tl[i] >= sVal) { sIdx = i; break; } }
+            for(let i=tl.length-1; i>=0; i--) { if(tl[i] <= eVal) { eIdx = i; break; } }
+            if (sIdx > eIdx) eIdx = sIdx;
+            
+            const sliced = tl.slice(sIdx, eIdx + 1);
+            const labels = aggregateLabels(sliced, selection.granularity);
+            
+            const dat = await fetchAggregatedData();
+            const datasets = [];
+            const tableDatasets = [];
+            
+            const customLegend = document.getElementById('chart-legend');
+            if (customLegend) customLegend.style.display = selection.displayMode === 'detailed' ? 'none' : 'flex';
+
+            if (dat) {
+                const cAgg = aggregate(sliced, dat.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                const pAgg = aggregate(sliced, dat.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                
+                if (selection.displayMode === 'aggregated') {
+                    datasets.push({ label: '当年 (合算)', data: cAgg, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.05)', fill: true, tension: 0.4, borderWidth: 3 });
+                    datasets.push({ label: '前年 (合算)', data: pAgg, borderColor: '#cbd5e1', borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 2 });
+                }
+
+                const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#eab308'];
+
+                for(let i=0; i<dat.details.length; i++) {
+                    const d = dat.details[i];
+                    const detailCAgg = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                    const detailPAgg = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                    
+                    const hasC = detailCAgg.some(v => v !== 0);
+                    const hasP = detailPAgg.some(v => v !== 0);
+                    
+                    if (hasC || hasP) {
+                        if (hasC) tableDatasets.push({ label: d.label + " (当年)", data: detailCAgg, isTotal: false });
+                        if (hasP) tableDatasets.push({ label: d.label + " (前年)", data: detailPAgg, isTotal: false });
+                        
+                        if (selection.displayMode === 'detailed') {
+                            const cColor = colors[i % colors.length];
+                            if (hasC) datasets.push({ label: d.label + " (当年)", data: detailCAgg, borderColor: cColor, backgroundColor: cColor + '20', fill: false, tension: 0.4, borderWidth: 2 });
+                            if (hasP) datasets.push({ label: d.label + " (前年)", data: detailPAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                        }
+                    }
+                }
+                
+                tableDatasets.push({ label: '【合算】当年', data: cAgg, isTotal: true });
+                tableDatasets.push({ label: '【合算】前年', data: pAgg, isTotal: true });
+            }
+            renderChart(labels, datasets); renderTable(labels, tableDatasets);
+            if (dat) {
+                const cAgg = aggregate(sliced, dat.c.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                const pAgg = aggregate(sliced, dat.p.slice(sIdx, eIdx + 1), selection.granularity).map(v => v / selection.unit);
+                updateAIAnalysis(labels, cAgg, pAgg, dat.details, sIdx, eIdx, sliced);
+            } else {
+                updateAIAnalysis([], [], [], [], 0, 0, []);
+            }
+            document.getElementById('path-indicator').textContent = selection.branches.length + " 支社 / " + selection.routes.length + " ルート";
+            renderChips('branch', selection.branches);
+            renderChips('route', selection.routes);
+            renderChips('category', selection.categories);
+        }
+
+        // ====== Period Comparison Mode ======
+        async function updateCompare() {
+            const tl = DATA_MATRIX.timeline || [];
+            const sA = document.getElementById('compare-start-a').value;
+            const eA = document.getElementById('compare-end-a').value;
+            const sB = document.getElementById('compare-start-b').value;
+            const eB = document.getElementById('compare-end-b').value;
+            if (!sA || !eA || !sB || !eB) return;
+
+            // Sync values to selection object
+            selection.startDateA = sA;
+            selection.endDateA = eA;
+            selection.startDateB = sB;
+            selection.endDateB = eB;
+
+            // Find index ranges for Period A and Period B
+            let sIdxA = 0, eIdxA = tl.length - 1;
+            for(let i=0; i<tl.length; i++) { if(tl[i] >= sA) { sIdxA = i; break; } }
+            for(let i=tl.length-1; i>=0; i--) { if(tl[i] <= eA) { eIdxA = i; break; } }
+            if (sIdxA > eIdxA) eIdxA = sIdxA;
+
+            let sIdxB = 0, eIdxB = tl.length - 1;
+            for(let i=0; i<tl.length; i++) { if(tl[i] >= sB) { sIdxB = i; break; } }
+            for(let i=tl.length-1; i>=0; i--) { if(tl[i] <= eB) { eIdxB = i; break; } }
+            if (sIdxB > eIdxB) eIdxB = sIdxB;
+
+            const slicedA = tl.slice(sIdxA, eIdxA + 1);
+            const slicedB = tl.slice(sIdxB, eIdxB + 1);
+
+            // Build labels: use relative month labels (4月, 5月, ...) for alignment
+            const labelsA = aggregateLabels(slicedA, selection.granularity);
+            const labelsB = aggregateLabels(slicedB, selection.granularity);
+
+            // Create aligned labels: use period A's month count as reference
+            // For display, show relative month labels
+            const yearA = sA.substring(0, 4);
+            const yearB = sB.substring(0, 4);
+            const labelTextA = sA.substring(0,7) + '～' + eA.substring(0,7);
+            const labelTextB = sB.substring(0,7) + '～' + eB.substring(0,7);
+
+            const dat = await fetchAggregatedData();
+            const datasets = [];
+            const tableDatasets = [];
+
+            const customLegend = document.getElementById('chart-legend');
+            if (customLegend) {
+                customLegend.style.display = 'flex';
+                customLegend.innerHTML = `
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-emerald-500"></div><span class="text-xs font-black text-slate-600">期間A (${labelTextA})</span></div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-blue-400"></div><span class="text-xs font-black text-slate-600">期間B (${labelTextB})</span></div>
+                `;
+            }
+
+            if (dat) {
+                // Period A: use 'c' array data
+                const aAgg = aggregate(slicedA, dat.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
+                // Period B: use 'c' array data
+                const bAgg = aggregate(slicedB, dat.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
+
+                // Use the longer label set, pad the shorter one
+                const maxLen = Math.max(labelsA.length, labelsB.length);
+                const displayLabels = [];
+                for (let i = 0; i < maxLen; i++) {
+                    displayLabels.push(labelsA[i] || labelsB[i] || (i + 1) + '期');
+                }
+                while (aAgg.length < maxLen) aAgg.push(0);
+                while (bAgg.length < maxLen) bAgg.push(0);
+
+                datasets.push({ label: '期間A (' + labelTextA + ')', data: aAgg, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.05)', fill: true, tension: 0.4, borderWidth: 3 });
+                datasets.push({ label: '期間B (' + labelTextB + ')', data: bAgg, borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.05)', fill: true, tension: 0.4, borderWidth: 3, borderDash: [5,5] });
+
+                // Detail datasets for table (each combination)
+                const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#eab308'];
+                for(let i=0; i<dat.details.length; i++) {
+                    const d = dat.details[i];
+                    const detailAAgg = aggregate(slicedA, d.c.slice(sIdxA, eIdxA + 1), selection.granularity).map(v => v / selection.unit);
+                    const detailBAgg = aggregate(slicedB, d.c.slice(sIdxB, eIdxB + 1), selection.granularity).map(v => v / selection.unit);
+                    while (detailAAgg.length < maxLen) detailAAgg.push(0);
+                    while (detailBAgg.length < maxLen) detailBAgg.push(0);
+                    const hasA = detailAAgg.some(v => v !== 0);
+                    const hasB = detailBAgg.some(v => v !== 0);
+                    if (hasA || hasB) {
+                        if (hasA) tableDatasets.push({ label: d.label + ' (期間A)', data: detailAAgg, isTotal: false });
+                        if (hasB) tableDatasets.push({ label: d.label + ' (期間B)', data: detailBAgg, isTotal: false });
+
+                        if (selection.displayMode === 'detailed') {
+                            const cColor = colors[i % colors.length];
+                            if (hasA) datasets.push({ label: d.label + ' (期間A)', data: detailAAgg, borderColor: cColor, fill: false, tension: 0.4, borderWidth: 2 });
+                            if (hasB) datasets.push({ label: d.label + ' (期間B)', data: detailBAgg, borderColor: cColor, borderDash: [5,5], fill: false, tension: 0.4, borderWidth: 1.5, hidden: true });
+                        }
+                    }
+                }
+
+                tableDatasets.push({ label: '【合算】期間A (' + labelTextA + ')', data: aAgg, isTotal: true });
+                tableDatasets.push({ label: '【合算】期間B (' + labelTextB + ')', data: bAgg, isTotal: true });
+                // Add diff row
+                const diffRow = displayLabels.map((_, idx) => aAgg[idx] - bAgg[idx]);
+                tableDatasets.push({ label: '【差額】(A - B)', data: diffRow, isTotal: true });
+                // Add ratio row
+                const ratioRow = displayLabels.map((_, idx) => bAgg[idx] > 0 ? ((aAgg[idx] / bAgg[idx]) * 100) : 0);
+                tableDatasets.push({ label: '【比率】(A / B %)', data: ratioRow, isTotal: true, isRatio: true });
+
+                renderChart(displayLabels, datasets.slice(0, selection.displayMode === 'detailed' ? undefined : 2));
+                renderTable(displayLabels, tableDatasets);
+                updateCompareAIAnalysis(displayLabels, aAgg, bAgg, labelTextA, labelTextB, dat.details, sIdxA, eIdxA, sIdxB, eIdxB, slicedA, slicedB);
+            } else {
+                renderChart([], []); renderTable([], []);
+                updateAIAnalysis([], [], [], [], 0, 0, []);
+            }
+            document.getElementById('path-indicator').textContent = '📊 期間比較: ' + labelTextA + ' vs ' + labelTextB;
+            renderChips('branch', selection.branches);
+            renderChips('route', selection.routes);
+            renderChips('category', selection.categories);
+        }
+
+        function updateCompareAIAnalysis(labels, aAgg, bAgg, labelA, labelB, details, sIdxA, eIdxA, sIdxB, eIdxB, slicedA, slicedB) {
+            const container = document.getElementById('ai-analysis-content');
+            if (!container) return;
+
+            const hasData = aAgg.some(v => v !== 0) || bAgg.some(v => v !== 0);
+            const card = document.getElementById('ai-analysis-card');
+            if (!hasData) { if (card) card.style.display = 'none'; return; }
+            if (card) card.style.display = 'block';
+
+            const aTotal = aAgg.reduce((s, v) => s + v, 0);
+            const bTotal = bAgg.reduce((s, v) => s + v, 0);
+            const diff = aTotal - bTotal;
+            const ratio = bTotal > 0 ? (aTotal / bTotal) * 100 : 0;
+            const metric = selection.metric;
+            const unitText = selection.unit === 0.001 ? '円' : (selection.unit === 1 ? '千円' : (selection.unit === 10 ? '万円' : '百万円'));
+
+            let maxGrowthRatio = -Infinity, maxGrowthLabel = '';
+            let maxDeclineRatio = Infinity, maxDeclineLabel = '';
+            let anomalyMonths = [];
+            for (let i = 0; i < labels.length; i++) {
+                if (bAgg[i] > 0) {
+                    const r = (aAgg[i] / bAgg[i]) * 100;
+                    if (r > maxGrowthRatio) { maxGrowthRatio = r; maxGrowthLabel = labels[i]; }
+                    if (r < maxDeclineRatio) { maxDeclineRatio = r; maxDeclineLabel = labels[i]; }
+                    if (r < 80) anomalyMonths.push({ label: labels[i], ratio: r, status: 'decline' });
+                    else if (r > 120) anomalyMonths.push({ label: labels[i], ratio: r, status: 'growth' });
+                }
+            }
+
+            const recentLen = Math.min(3, labels.length);
+            let trendText = '';
+            if (recentLen > 0) {
+                let gCnt = 0, dCnt = 0;
+                for (let i = labels.length - recentLen; i < labels.length; i++) {
+                    if (aAgg[i] > bAgg[i]) gCnt++; else if (aAgg[i] < bAgg[i]) dCnt++;
+                }
+                if (gCnt === recentLen) trendText = `直近${recentLen}期間は連続して期間Aが期間Bを上回り、堅調に成長しています。`;
+                else if (dCnt === recentLen) trendText = `直近${recentLen}期間は連続して期間Aが期間Bを下回り、減少傾向が見られます。`;
+                else trendText = `直近の推移は期間Aと期間Bが拮抗しており、一進一退の動きです。`;
+            }
+
+            let html = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">`;
+            html += `<div class="space-y-3">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider">Period Comparison | 期間比較概況</h4>`;
+            html += `<p class="text-xs text-slate-700"><strong>期間A</strong>（${labelA}）の${metric}累計は <strong>${aTotal.toLocaleString(undefined, {maximumFractionDigits:1})} ${unitText}</strong>、<strong>期間B</strong>（${labelB}）は <strong>${bTotal.toLocaleString(undefined, {maximumFractionDigits:1})} ${unitText}</strong> です。</p>`;
+            html += `<p class="text-xs text-slate-700">期間Aは期間Bに対し <strong>${ratio.toFixed(1)}%</strong>（差額: ${diff >= 0 ? '+' : ''}${diff.toLocaleString(undefined, {maximumFractionDigits:1})} ${unitText}）で推移しています。</p>`;
+            html += `<p class="text-xs text-slate-600">${trendText}</p>`;
+            html += `</div>`;
+
+            html += `<div class="space-y-3">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider">Key Indicators | 特異点</h4>`;
+            let keyPts = [];
+            if (maxGrowthRatio > -Infinity && maxGrowthRatio > 100) keyPts.push(`最も伸長: <strong>${maxGrowthLabel}</strong>（${maxGrowthRatio.toFixed(1)}%）`);
+            if (maxDeclineRatio < Infinity && maxDeclineRatio < 100) keyPts.push(`最も落込: <strong>${maxDeclineLabel}</strong>（${maxDeclineRatio.toFixed(1)}%）`);
+            if (keyPts.length > 0) html += `<p class="text-xs text-slate-700">${keyPts.join('<br>')}</p>`;
+
+            if (anomalyMonths.length > 0) {
+                const dec = anomalyMonths.filter(m => m.status === 'decline').map(m => `${m.label}(${m.ratio.toFixed(1)}%)`);
+                const gro = anomalyMonths.filter(m => m.status === 'growth').map(m => `${m.label}(${m.ratio.toFixed(1)}%)`);
+                let at = '';
+                if (dec.length > 0) at += `⚠️ <strong>大幅減少</strong>: ${dec.join(', ')}<br>`;
+                if (gro.length > 0) at += `📈 <strong>大幅伸長</strong>: ${gro.join(', ')}`;
+                html += `<p class="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">${at}</p>`;
+            } else {
+                html += `<p class="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">大幅な乖離（±20%以上）は検出されず、安定した推移です。</p>`;
+            }
+
+            // 内訳比較
+            if (details && details.length > 1) {
+                let detailAnalyses = [];
+                details.forEach(d => {
+                    const dA = aggregate(slicedA, d.c.slice(sIdxA, eIdxA + 1), selection.granularity);
+                    const dB = aggregate(slicedB, d.c.slice(sIdxB, eIdxB + 1), selection.granularity);
+                    const dATotal = dA.reduce((s, v) => s + v, 0);
+                    const dBTotal = dB.reduce((s, v) => s + v, 0);
+                    const dRatio = dBTotal > 0 ? (dATotal / dBTotal) * 100 : 0;
+                    if (dA.some(v => v !== 0) || dB.some(v => v !== 0)) {
+                        detailAnalyses.push({ label: d.label, ratio: dRatio, aTotal: dATotal, bTotal: dBTotal });
+                    }
+                });
+                if (detailAnalyses.length > 1) {
+                    const valid = detailAnalyses.filter(d => d.bTotal > 0);
+                    if (valid.length > 0) {
+                        valid.sort((a, b) => b.ratio - a.ratio);
+                        const best = valid[0], worst = valid[valid.length - 1];
+                        const simplify = (lbl) => { const p = lbl.split('/').map(s => s.trim()).filter(s => s !== 'すべて' && s !== '合算' && s !== '合計'); return p.length > 0 ? p.join(' / ') : lbl; };
+                        let dt = `<p class="text-[11px] text-slate-500 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10 leading-normal mt-2">`;
+                        dt += `📊 <strong>内訳比較</strong>:<br>`;
+                        dt += `・最も伸長: <strong>${simplify(best.label)}</strong>（${best.ratio.toFixed(1)}%）<br>`;
+                        if (best.label !== worst.label) dt += `・最も苦戦: <strong>${simplify(worst.label)}</strong>（${worst.ratio.toFixed(1)}%）`;
+                        dt += `</p>`;
+                        html += dt;
+                    }
+                }
+            }
+
+            html += `</div></div>`;
+
+            // Advice
+            let advice = '';
+            if (ratio >= 100) {
+                advice = `期間A（${labelA}）は期間B（${labelB}）を上回っています。成長の要因を特定し、今後の戦略に活かすことを推奨します。`;
+            } else {
+                advice = `期間A（${labelA}）は期間B（${labelB}）を下回っています。減少要因（市場環境、競合、商流変更等）の深掘り分析を推奨します。`;
+            }
+            html += `<div class="mt-6 pt-6 border-t border-slate-100 flex items-start gap-3">`;
+            html += `<div class="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center text-primary shrink-0 mt-0.5"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>`;
+            html += `<div class="flex-1">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Recommended Action | AI推奨アクション</h4>`;
+            html += `<p class="text-xs text-emerald-800 bg-emerald-500/5 px-4 py-3 rounded-2xl border border-emerald-500/10 font-bold italic">「${advice}」</p>`;
+            html += `</div></div>`;
+
+            container.innerHTML = html;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function renderChips(type, items) {
+            const container = document.getElementById('chips-' + type);
+            if (!container) return;
+            container.innerHTML = items.filter(it => it).map(it => '<span class="chip">' + it + '</span>').join('');
+        }
+
+        function updateAIAnalysis(labels, cAgg, pAgg, details = [], sIdx = 0, eIdx = 0, sliced = []) {
+            const container = document.getElementById('ai-analysis-content');
+            if (!container) return;
+
+            const hasData = cAgg.some(v => v !== 0) || pAgg.some(v => v !== 0);
+            const card = document.getElementById('ai-analysis-card');
+            if (!hasData) {
+                if (card) card.style.display = 'none';
+                return;
+            }
+            if (card) card.style.display = 'block';
+
+            const cTotal = cAgg.reduce((sum, v) => sum + v, 0);
+            const pTotal = pAgg.reduce((sum, v) => sum + v, 0);
+            const diff = cTotal - pTotal;
+            const ratio = pTotal > 0 ? (cTotal / pTotal) * 100 : 0;
+            const metric = selection.metric;
+            const unitText = selection.unit === 0.001 ? "円" : (selection.unit === 1 ? "千円" : (selection.unit === 10 ? "万円" : (selection.unit === 1000 ? "百万円" : "千円")));
+
+            let maxGrowthRatio = -Infinity;
+            let maxGrowthLabel = '';
+            let maxDeclineRatio = Infinity;
+            let maxDeclineLabel = '';
+            let anomalyMonths = [];
+
+            for (let i = 0; i < labels.length; i++) {
+                const cVal = cAgg[i] || 0;
+                const pVal = pAgg[i] || 0;
+                if (pVal > 0) {
+                    const r = (cVal / pVal) * 100;
+                    if (r > maxGrowthRatio) {
+                        maxGrowthRatio = r;
+                        maxGrowthLabel = labels[i];
+                    }
+                    if (r < maxDeclineRatio) {
+                        maxDeclineRatio = r;
+                        maxDeclineLabel = labels[i];
+                    }
+                    if (r < 80) {
+                        anomalyMonths.push({ label: labels[i], ratio: r, diff: cVal - pVal, status: 'decline' });
+                    } else if (r > 120) {
+                        anomalyMonths.push({ label: labels[i], ratio: r, diff: cVal - pVal, status: 'growth' });
+                    }
+                }
+            }
+
+            const recentLength = Math.min(3, labels.length);
+            let trendText = '';
+            if (recentLength > 0) {
+                let recentGrowthCount = 0;
+                let recentDeclineCount = 0;
+                for (let i = labels.length - recentLength; i < labels.length; i++) {
+                    if ((cAgg[i] || 0) > (pAgg[i] || 0)) {
+                        recentGrowthCount++;
+                    } else if ((cAgg[i] || 0) < (pAgg[i] || 0)) {
+                        recentDeclineCount++;
+                    }
+                }
+                if (recentGrowthCount === recentLength) {
+                    trendText = `直近の推移（${recentLength}期間）は連続して前年を上回っており、非常に堅調な成長トレンドを示しています。`;
+                } else if (recentDeclineCount === recentLength) {
+                    trendText = `直近の推移（${recentLength}期間）は連続して前年を下回っており、減少傾向が続いています。速やかな要因分析と対策が必要です。`;
+                } else {
+                    trendText = `直近の推移は前年比で一進一退の動きとなっており、概ね横ばいまたは拮抗した状況です。`;
+                }
+            }
+
+            let html = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">`;
+            
+            html += `<div class="space-y-3">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider">Overall Summary | 全体実績概況</h4>`;
+            html += `<p class="text-xs text-slate-700">期間累計の${metric}は、当年実績 <strong>${cTotal.toLocaleString(undefined, {maximumFractionDigits: 1})} ${unitText}</strong> となり、前年実績 <strong>${pTotal.toLocaleString(undefined, {maximumFractionDigits: 1})} ${unitText}</strong> に対し、前年比 <strong>${ratio.toFixed(1)}%</strong> （差額: ${diff >= 0 ? '+' : ''}${diff.toLocaleString(undefined, {maximumFractionDigits: 1})} ${unitText}）で推移しています。</p>`;
+            html += `<p class="text-xs text-slate-600">${trendText}</p>`;
+            html += `</div>`;
+
+            html += `<div class="space-y-3">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider">Key Indicators & Anomalies | 特異点の検出</h4>`;
+            
+            let keyPoints = [];
+            if (maxGrowthRatio > -Infinity && maxGrowthRatio > 100) {
+                keyPoints.push(`最も伸長した期間は <strong>${maxGrowthLabel}</strong>（前年比: <strong>${maxGrowthRatio.toFixed(1)}%</strong>）です。`);
+            }
+            if (maxDeclineRatio < Infinity && maxDeclineRatio < 100) {
+                keyPoints.push(`最も落ち込んだ期間は <strong>${maxDeclineLabel}</strong>（前年比: <strong>${maxDeclineRatio.toFixed(1)}%</strong>）です。`);
+            }
+            
+            if (keyPoints.length > 0) {
+                html += `<p class="text-xs text-slate-700">${keyPoints.join('<br>')}</p>`;
+            }
+
+            if (anomalyMonths.length > 0) {
+                const declines = anomalyMonths.filter(m => m.status === 'decline').map(m => `${m.label}(${m.ratio.toFixed(1)}%)`);
+                const growths = anomalyMonths.filter(m => m.status === 'growth').map(m => `${m.label}(${m.ratio.toFixed(1)}%)`);
+                
+                let anomalyText = '';
+                if (declines.length > 0) {
+                    anomalyText += `⚠️ <strong>大幅な前年割れ期間</strong>: ${declines.join(', ')}<br>`;
+                }
+                if (growths.length > 0) {
+                    anomalyText += `📈 <strong>大幅な伸長期間</strong>: ${growths.join(', ')}`;
+                }
+                html += `<p class="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">${anomalyText}</p>`;
+            } else {
+                html += `<p class="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">前年実績から大幅に乖離（±20%以上）した特異期間は検出されておらず、安定した推移です。</p>`;
+            }
+
+            // 内訳の比較ロジックを追加
+            if (details && details.length > 1 && sliced && sliced.length > 0) {
+                let detailAnalyses = [];
+                details.forEach(d => {
+                    const detailC = aggregate(sliced, d.c.slice(sIdx, eIdx + 1), selection.granularity);
+                    const detailP = aggregate(sliced, d.p.slice(sIdx, eIdx + 1), selection.granularity);
+                    const dCTotal = detailC.reduce((sum, v) => sum + v, 0);
+                    const dPTotal = detailP.reduce((sum, v) => sum + v, 0);
+                    const dRatio = dPTotal > 0 ? (dCTotal / dPTotal) * 100 : 0;
+                    
+                    const hasC = detailC.some(v => v !== 0);
+                    const hasP = detailP.some(v => v !== 0);
+                    if (hasC || hasP) {
+                        detailAnalyses.push({ label: d.label, ratio: dRatio, cTotal: dCTotal, pTotal: dPTotal });
+                    }
+                });
+
+                if (detailAnalyses.length > 1) {
+                    const validDetails = detailAnalyses.filter(d => d.pTotal > 0);
+                    if (validDetails.length > 0) {
+                        validDetails.sort((a, b) => b.ratio - a.ratio);
+                        const best = validDetails[0];
+                        const worst = validDetails[validDetails.length - 1];
+                        
+                        const simplifyLabel = (lbl) => {
+                            const parts = lbl.split('/').map(p => p.trim());
+                            const cleanParts = parts.filter(p => p !== 'すべて' && p !== '合算' && p !== '合計');
+                            return cleanParts.length > 0 ? cleanParts.join(' / ') : lbl;
+                        };
+
+                        const bestLabel = simplifyLabel(best.label);
+                        const worstLabel = simplifyLabel(worst.label);
+
+                        let detailSummaryText = `<p class="text-[11px] text-slate-500 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10 leading-normal mt-2">`;
+                        detailSummaryText += `📊 <strong>内訳の比較分析</strong>:<br>`;
+                        detailSummaryText += `・最も伸長したのは <strong>${bestLabel}</strong>（前年比: <strong>${best.ratio.toFixed(1)}%</strong>）です。<br>`;
+                        if (best.label !== worst.label) {
+                            detailSummaryText += `・最も苦戦したのは <strong>${worstLabel}</strong>（前年比: <strong>${worst.ratio.toFixed(1)}%</strong>）です。`;
+                        }
+                        detailSummaryText += `</p>`;
+                        html += detailSummaryText;
+                    }
+                }
+            }
+
+            html += `</div>`;
+            html += `</div>`;
+
+            let advice = '';
+            if (metric === '売上') {
+                if (ratio >= 100) {
+                    advice = '売上規模は前年超えをキープしており概ね好調です。今後は売上の伸びに伴って粗利が伴っているか、収益性（粗利率）の推移に焦点を当てた分析を推奨します。';
+                } else {
+                    advice = '売上合計が前年割れとなっております。特に前年比の低い月における販売量減少の要因（競合要因、市場要因、または商流の変更など）を深掘りし、対策を講じる必要があります。';
+                }
+            } else {
+                if (ratio >= 100) {
+                    advice = '粗利額は前年を上回る推移で、収益性は健全です。引き続き、高収益なルート・販売区分の構成比（製品ミックス）を維持する戦略を推奨します。';
+                } else {
+                    advice = '粗利額が前年を下回っています。売上の推移と比較し、売上自体が落ちているのか、それとも原価上昇等で荒利率が悪化しているのか、要因の切り分けが必要です。';
+                }
+            }
+
+            html += `<div class="mt-6 pt-6 border-t border-slate-100 flex items-start gap-3">`;
+            html += `<div class="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center text-primary shrink-0 mt-0.5"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>`;
+            html += `<div class="flex-1">`;
+            html += `<h4 class="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Recommended Action | AI推奨アクション</h4>`;
+            html += `<p class="text-xs text-emerald-800 bg-emerald-500/5 px-4 py-3 rounded-2xl border border-emerald-500/10 font-bold italic">「${advice}」</p>`;
+            html += `</div>`;
+            html += `</div>`;
+
+            container.innerHTML = html;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function setGranularity(g) {
+            selection.granularity = g;
+            update();
+        }
+
+        function getWeekLabel(dateStr) {
+            const parts = dateStr.split('-');
+            const d = new Date(parts[0], parts[1]-1, parts[2]);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(d.setDate(diff));
+            const m = String(monday.getMonth() + 1).padStart(2, '0');
+            const dayNum = String(monday.getDate()).padStart(2, '0');
+            return `${m}/${dayNum}週`;
+        }
+
+        function aggregateLabels(t, g) { 
+            if (g === 'day') return t;
+            if (g === 'week') return [...new Set(t.map(d => getWeekLabel(d)))];
+            return [...new Set(t.map(d => d.substring(0, 7)))];
+        }
+        
+        function aggregate(t, v, g) {
+            const lbs = aggregateLabels(t, g), res = {}; lbs.forEach(l => res[l] = 0);
+            for(let i=0; i<t.length; i++) { 
+                let k = t[i];
+                if (g === 'month') k = t[i].substring(0, 7);
+                else if (g === 'week') k = getWeekLabel(t[i]);
+                res[k] += v[i] || 0; 
+            }
+            return lbs.map(l => res[l]);
+        }
+
+        function renderChart(labels, datasets) {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line', data: { labels, datasets },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            display: selection.displayMode === 'detailed',
+                            position: 'bottom',
+                            labels: { boxWidth: 14, font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } }
+                        } 
+                    },
+                    scales: {
+                        x: { ticks: { font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } } },
+                        y: { ticks: { font: { size: 12, weight: 'bold', family: "'Outfit', 'Noto Sans JP', sans-serif" } } }
+                    }
+                }
+            });
+        }
+
+        function renderTable(labels, datasets) {
+            const h = document.getElementById('tableHeader'), b = document.getElementById('tableBody');
+            h.innerHTML = "<tr><th class='p-4 whitespace-nowrap'>分析区分 <span class='text-[10px] text-slate-300 block font-normal -mt-0.5'>Metric</span></th>" + labels.map(l=>"<th class='p-4 text-center min-w-[100px]'>"+l+"</th>").join('') + "</tr>";
+            b.innerHTML = datasets.map(d => {
+                const rowClass = d.isTotal ? "border-b-2 border-slate-200 bg-slate-50/50" : "border-b border-slate-50 hover:bg-slate-50/50";
+                const labelClass = d.isTotal ? "text-slate-800 font-black whitespace-nowrap text-sm" : "text-slate-500 font-bold whitespace-nowrap text-xs";
+                return "<tr class='" + rowClass + "'><td class='p-4 " + labelClass + "'>" + d.label + "</td>" + d.data.map(v => {
+                    let valHtml = "";
+                    if (d.isRatio) {
+                        valHtml = v === 0 ? "0.0%" : v.toFixed(1) + "%";
+                    } else {
+                        valHtml = v === 0 ? "<span class='text-slate-300'>-</span>" : v.toLocaleString(undefined, {maximumFractionDigits: 1});
+                    }
+                    return "<td class='p-4 text-right " + (d.isTotal ? "text-slate-800 font-black text-sm" : "text-slate-600 text-xs") + "'>" + valHtml + "</td>";
+                }).join('') + "</tr>";
+            }).join('');
+        }
+
+        function togglePicker(t) {
+            activePicker = t;
+            const modal = document.getElementById('picker-modal');
+            const ti = document.getElementById('picker-title');
+            const list = t === 'branch' ? DATA_MATRIX.branches : (t === 'route' ? DATA_MATRIX.routes : DATA_MATRIX.classes);
+            
+            if (!list || list.length === 0) { alert("データの準備ができていません。少々お待ちください。"); return; }
+            
+            if (t === 'branch') { ti.textContent = "支社の選択"; pickerItems = list; tempSelected = selection.branches.slice(); }
+            else if (t === 'route') { ti.textContent = "ルートの選択"; pickerItems = list; tempSelected = selection.routes.slice(); }
+            else if (t === 'category') { ti.textContent = "販売区分の選択"; pickerItems = list; tempSelected = selection.categories.slice(); }
+            
+            renderPickerList(pickerItems);
+            modal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closePicker() { document.getElementById('picker-modal').style.display = 'none'; }
+        
+        function renderPickerList(items) {
+            const list = document.getElementById('picker-list');
+            list.innerHTML = items.map(item => {
+                const isS = tempSelected.indexOf(item) !== -1;
+                return '<div onclick="toggleItem(\''+item+'\')" class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between cursor-pointer '+(isS?'list-item-selected':'text-slate-600')+'"><span class="text-sm font-black">'+item+'</span>'+(isS?'<i data-lucide="check" class="w-5 h-5"></i>':'')+'</div>';
+            }).join('');
+            lucide.createIcons();
+        }
+        
+        window.toggleItem = function(it) {
+            const idx = tempSelected.indexOf(it);
+            if(idx>-1) tempSelected.splice(idx,1); else tempSelected.push(it);
+            filterPicker();
+        };
+        window.selectAll = function() { tempSelected = pickerItems.slice(); renderPickerList(pickerItems); };
+        window.clearAll = function() { tempSelected = []; renderPickerList(pickerItems); };
+        window.filterPicker = function() {
+            const q = document.getElementById('picker-search').value.toLowerCase();
+            renderPickerList(pickerItems.filter(i => i.toLowerCase().indexOf(q) !== -1));
+        };
+        window.applySelection = function() {
+            if(tempSelected.length===0){alert("1つ以上選んでください");return;}
+            if(activePicker==='branch') selection.branches = tempSelected.slice();
+            else if(activePicker==='route') selection.routes = tempSelected.slice();
+            else if(activePicker==='category') selection.categories = tempSelected.slice();
+            update(); closePicker();
+        };
+
+        window.onMetricChange = function() { selection.metric = document.getElementById('metricSelect').value; update(); };
+        function onGranularityChange() {
+            selection.granularity = document.getElementById('granularitySelect').value;
+            update();
+        }
+
+        function onDisplayModeChange() {
+            selection.displayMode = document.getElementById('displayModeSelect').value;
+            update();
+        }
+        
+        function onUnitChange() {
+            selection.unit = parseFloat(document.getElementById('unitSelect').value) || 1;
+            update();
+        }
+
+        function onCompareModeChange() {
+            selection.compareMode = document.getElementById('compareModeSelect').value;
+            const normalSec = document.getElementById('normal-date-section');
+            const compareSec = document.getElementById('compare-date-section');
+            if (selection.compareMode === 'period') {
+                normalSec.style.display = 'none';
+                compareSec.style.display = 'block';
+                // Set default period comparison dates
+                document.getElementById('compare-start-a').value = selection.startDateA;
+                document.getElementById('compare-end-a').value = selection.endDateA;
+                document.getElementById('compare-start-b').value = selection.startDateB;
+                document.getElementById('compare-end-b').value = selection.endDateB;
+            } else {
+                normalSec.style.display = 'block';
+                compareSec.style.display = 'none';
+                // Restore chart legend
+                const customLegend = document.getElementById('chart-legend');
+                if (customLegend) {
+                    customLegend.innerHTML = `
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-primary"></div><span class="text-xs font-black text-slate-600">当年</span></div>
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-slate-200"></div><span class="text-xs font-black text-slate-600">前年</span></div>
+                    `;
+                }
+            }
+            update();
+        }
+
+        window.exportCSV = function() {
+            const h = document.getElementById('tableHeader');
+            const b = document.getElementById('tableBody');
+            if (!h || !b) return;
+            
+            const rows = [];
+            
+            // ヘッダー行の作成
+            const headerCells = h.querySelectorAll('th');
+            const headerRow = [];
+            headerCells.forEach(cell => {
+                let text = cell.textContent.split('\n')[0].trim();
+                headerRow.push('"' + text.replace(/"/g, '""') + '"');
+            });
+            rows.push(headerRow.join(','));
+            
+            // ボディ行の作成
+            const bodyRows = b.querySelectorAll('tr');
+            bodyRows.forEach(tr => {
+                const cells = tr.querySelectorAll('td');
+                const row = [];
+                cells.forEach((cell, idx) => {
+                    let text = cell.textContent.split('\n')[0].trim();
+                    if (idx > 0) {
+                        text = text.replace(/,/g, '');
+                        if (text === '-') text = '0';
+                    }
+                    row.push('"' + text.replace(/"/g, '""') + '"');
+                });
+                rows.push(row.join(','));
+            });
+            
+            const csvContent = "\uFEFF" + rows.join('\r\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", '実績データ_' + new Date().toISOString().substring(0, 10) + '.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.exportPDF = function() {
+            if (typeof html2canvas === 'undefined' || (typeof jspdf === 'undefined' && typeof jsPDF === 'undefined')) {
+                alert("PDF出力ライブラリを読み込み中です。少々お待ちください。");
+                return;
+            }
+
+            // 1. グラフを画像（Base64）として取得
+            if (!chart) {
+                alert("グラフデータがありません。");
+                return;
+            }
+            const chartImageSrc = chart.toBase64Image();
+
+            // 2. テーブル要素を取得
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            if (!tableHeader || !tableBody) {
+                alert("テーブルデータがありません。");
+                return;
+            }
+
+            // 3. ユーザー向けのプレミアムなローディングオーバーレイを作成
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.id = 'pdf-loading-overlay';
+            loadingOverlay.style.position = 'fixed';
+            loadingOverlay.style.inset = '0';
+            loadingOverlay.style.zIndex = '99999';
+            loadingOverlay.style.backgroundColor = 'rgba(15, 23, 42, 0.7)';
+            loadingOverlay.style.backdropFilter = 'blur(6px)';
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.style.flexDirection = 'column';
+            loadingOverlay.style.alignItems = 'center';
+            loadingOverlay.style.justifyContent = 'center';
+            loadingOverlay.style.fontFamily = "'Outfit', 'Noto Sans JP', sans-serif";
+
+            const spinner = document.createElement('div');
+            spinner.className = 'w-12 h-12 border-4 border-slate-700 border-t-emerald-500 rounded-full animate-spin';
+            spinner.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.2)';
+            
+            const loadingText = document.createElement('p');
+            loadingText.style.marginTop = '20px';
+            loadingText.style.color = '#ffffff';
+            loadingText.style.fontWeight = '900';
+            loadingText.style.fontSize = '15px';
+            loadingText.style.letterSpacing = '0.05em';
+            loadingText.style.textAlign = 'center';
+            loadingText.innerHTML = 'PDFレポートを作成中...<span style="display: block; font-size: 10px; color: #94a3b8; font-weight: 500; margin-top: 5px; letter-spacing: 0.1em;">Generating PDF Report</span>';
+
+            loadingOverlay.appendChild(spinner);
+            loadingOverlay.appendChild(loadingText);
+            document.body.appendChild(loadingOverlay);
+
+            // 4. 現在のスクロール位置を退避
+            const originalScrollX = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft;
+            const originalScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+            window.scrollTo(0, 0);
+
+            // 5. 一時的な印刷用コンテナを作成 (A4横サイズに綺麗に収めるため)
+            const printArea = document.createElement('div');
+            printArea.id = 'pdf-print-area';
+            printArea.style.position = 'fixed';
+            printArea.style.left = '0';
+            printArea.style.top = '0';
+            printArea.style.zIndex = '-9999'; // 画面の裏に隠す
+            printArea.style.width = '1600px';  // 1600px幅を確保
+            printArea.style.backgroundColor = '#ffffff';
+            printArea.style.padding = '40px';
+            printArea.style.boxSizing = 'border-box';
+            printArea.style.fontFamily = "'Outfit', 'Noto Sans JP', sans-serif";
+
+            // ヘッダータイトル部分
+            const headerContainer = document.createElement('div');
+            headerContainer.style.display = 'flex';
+            headerContainer.style.justifyContent = 'space-between';
+            headerContainer.style.alignItems = 'baseline';
+            headerContainer.style.borderBottom = '3px solid #10b981';
+            headerContainer.style.paddingBottom = '10px';
+            headerContainer.style.marginBottom = '20px';
+
+            const title = document.createElement('h2');
+            title.textContent = '実績分析レポート';
+            title.style.fontSize = '24px';
+            title.style.fontWeight = '900';
+            title.style.color = '#0f172a';
+            title.style.margin = '0';
+
+            const meta = document.createElement('span');
+            meta.textContent = '出力日: ' + new Date().toLocaleDateString('ja-JP');
+            meta.style.fontSize = '12px';
+            meta.style.fontWeight = 'bold';
+            meta.style.color = '#64748b';
+
+            headerContainer.appendChild(title);
+            headerContainer.appendChild(meta);
+            printArea.appendChild(headerContainer);
+
+            // グラフ画像を配置 (A4横に収まるよう高さを調整)
+            const imgContainer = document.createElement('div');
+            imgContainer.style.width = '100%';
+            imgContainer.style.height = '280px';
+            imgContainer.style.marginBottom = '20px';
+            imgContainer.style.display = 'flex';
+            imgContainer.style.justifyContent = 'center';
+            imgContainer.style.alignItems = 'center';
+            
+            const img = document.createElement('img');
+            img.src = chartImageSrc;
+            img.style.maxHeight = '100%';
+            img.style.maxWidth = '100%';
+            img.style.objectFit = 'contain';
+            imgContainer.appendChild(img);
+            printArea.appendChild(imgContainer);
+
+            // テーブルデータをクローンして追加
+            const tableContainer = document.createElement('div');
+            tableContainer.style.width = '100%';
+            
+            const newTable = document.createElement('table');
+            newTable.style.width = '100%';
+            newTable.style.borderCollapse = 'collapse';
+
+            // 列数に応じた動的フォントサイズ・幅の調整（はみ出し防止）
+            const colHeaders = tableHeader.querySelectorAll('th');
+            const colCount = colHeaders.length - 1; // 分析区分列を除いたデータ列数
+            let fontSizeTh = '11px';
+            let fontSizeTd = '10px';
+            let paddingY = '6px';
+            let paddingX = '8px';
+            let minWidthTh = '80px';
+            let nameWidth = '320px';
+
+            if (colCount > 20) { // 日別など
+                fontSizeTh = '8px';
+                fontSizeTd = '7.5px';
+                paddingY = '3px';
+                paddingX = '4px';
+                minWidthTh = '45px';
+                nameWidth = '220px';
+            } else if (colCount > 10) { // 週別・月別など
+                fontSizeTh = '10px';
+                fontSizeTd = '9px';
+                paddingY = '5px';
+                paddingX = '6px';
+                minWidthTh = '75px';
+                nameWidth = '280px';
+            }
+            
+            // テーブルヘッダーの複製とスタイル整形
+            const newHeader = tableHeader.cloneNode(true);
+            newHeader.querySelectorAll('th').forEach((th, idx) => {
+                th.style.borderBottom = '2px solid #e2e8f0';
+                th.style.padding = `${paddingY} ${paddingX}`;
+                th.style.fontSize = fontSizeTh;
+                th.style.color = '#475569';
+                th.style.fontWeight = '900';
+                th.style.backgroundColor = '#f8fafc';
+                th.innerText = th.innerText.split('\n')[0].trim();
+                if (idx === 0) {
+                    th.style.width = nameWidth;
+                    th.style.minWidth = nameWidth;
+                    th.style.textAlign = 'left';
+                    th.style.whiteSpace = 'normal';
+                } else {
+                    th.style.minWidth = minWidthTh;
+                    th.style.textAlign = 'center';
+                    th.style.whiteSpace = 'nowrap';
+                }
+            });
+
+            // テーブルボディの複製とスタイル整形
+            const newBody = tableBody.cloneNode(true);
+            newBody.querySelectorAll('tr').forEach(tr => {
+                const isTotal = tr.classList.contains('border-b-2') || (tr.cells[0] && (tr.cells[0].innerText.includes('合算') || tr.cells[0].innerText.includes('合計')));
+                if (isTotal) {
+                    tr.style.backgroundColor = '#f0fdf4'; // 合計行は薄い緑で強調
+                    tr.style.borderBottom = '2px solid #10b981';
+                    tr.style.borderTop = '2px solid #10b981';
+                } else {
+                    tr.style.borderBottom = '1px solid #f1f5f9';
+                }
+
+                tr.querySelectorAll('td').forEach((td, idx) => {
+                    td.style.padding = `${paddingY} ${paddingX}`;
+                    td.style.fontSize = fontSizeTd;
+                    td.innerText = td.innerText.split('\n')[0].trim();
+                    if (idx === 0) {
+                        td.style.color = '#0f172a';
+                        td.style.fontWeight = '900';
+                        td.style.textAlign = 'left';
+                        td.style.whiteSpace = 'normal'; // 折り返しを許可して横幅はみ出しを防ぐ
+                        td.style.wordBreak = 'break-all';
+                        td.style.width = nameWidth;
+                        td.style.maxWidth = nameWidth;
+                    } else {
+                        td.style.color = isTotal ? '#065f46' : '#475569';
+                        td.style.fontWeight = isTotal ? '900' : 'bold';
+                        td.style.textAlign = 'right';
+                        td.style.whiteSpace = 'nowrap';
+                    }
+                });
+            });
+
+            newTable.appendChild(newHeader);
+            newTable.appendChild(newBody);
+            tableContainer.appendChild(newTable);
+            printArea.appendChild(tableContainer);
+
+            // AI分析カードをクローンして追加
+            const aiCard = document.getElementById('ai-analysis-card');
+            if (aiCard && aiCard.style.display !== 'none') {
+                const newAiCard = aiCard.cloneNode(true);
+                newAiCard.style.marginTop = '30px';
+                newAiCard.style.width = '100%';
+                newAiCard.style.boxSizing = 'border-box';
+                newAiCard.style.background = 'linear-gradient(to bottom right, #f0fdf4, #ffffff)';
+                newAiCard.style.border = '1px solid rgba(16, 185, 129, 0.2)';
+                newAiCard.style.borderRadius = '24px';
+                newAiCard.style.padding = '24px';
+                
+                // クローン内のフォントサイズや要素のスタイルをPDF用に調整
+                newAiCard.querySelectorAll('h3').forEach(el => {
+                    el.style.color = '#0f172a';
+                    el.style.fontSize = '14px';
+                    el.style.fontWeight = '900';
+                });
+                newAiCard.querySelectorAll('h4').forEach(el => {
+                    el.style.color = '#475569';
+                    el.style.fontSize = '11px';
+                    el.style.fontWeight = '900';
+                    el.style.marginTop = '0px';
+                    el.style.marginBottom = '4px';
+                });
+                newAiCard.querySelectorAll('span').forEach(el => {
+                    if (el.classList.contains('text-[9px]')) {
+                        el.style.fontSize = '8px';
+                        el.style.color = '#64748b';
+                    }
+                });
+                newAiCard.querySelectorAll('p, td, div').forEach(el => {
+                    if (el.id !== 'ai-analysis-content' && !el.classList.contains('grid') && !el.classList.contains('space-y-3') && !el.classList.contains('flex-1') && !el.classList.contains('flex')) {
+                        el.style.color = '#334155';
+                        el.style.fontSize = '10.5px';
+                        el.style.lineHeight = '1.6';
+                    }
+                });
+                
+                // アクション部分のスタイル調整
+                const actionBox = newAiCard.querySelector('.italic');
+                if (actionBox) {
+                    actionBox.style.backgroundColor = '#f0fdf4';
+                    actionBox.style.padding = '12px 16px';
+                    actionBox.style.borderRadius = '16px';
+                    actionBox.style.border = '1px solid rgba(16, 185, 129, 0.2)';
+                    actionBox.style.fontSize = '11px';
+                    actionBox.style.color = '#065f46';
+                    actionBox.style.fontWeight = 'bold';
+                    actionBox.style.marginTop = '4px';
+                }
+                
+                printArea.appendChild(newAiCard);
+            }
+
+            // DOMに一時的に追加
+            document.body.appendChild(printArea);
+
+            // 6. 非同期画像の読み込み完了とレイアウトの確定を待ってからPDF出力
+            const imgLoad = new Promise((resolve) => {
+                if (img.complete) {
+                    resolve();
+                } else {
+                    img.onload = resolve;
+                    img.onerror = resolve; // 失敗時も進める
+                }
+            });
+
+            // ブラウザの再描画・レイアウト確定を待つためのディレイ
+            const delay = new Promise((resolve) => setTimeout(resolve, 350));
+
+            Promise.all([imgLoad, delay]).then(() => {
+                return html2canvas(printArea, {
+                    scale: 2.0,
+                    useCORS: true,
+                    logging: false,
+                    width: 1600,
+                    windowWidth: 1600,
+                    scrollX: 0,
+                    scrollY: 0,
+                    x: 0,
+                    y: 0
+                });
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const { jsPDF } = window.jspdf || window;
+                const pdf = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                const a4Width = 297;
+                const a4Height = 210;
+                const canvasRatio = canvas.width / canvas.height;
+                const a4Ratio = a4Width / a4Height;
+
+                let w, h, x, y;
+                if (canvasRatio > a4Ratio) {
+                    // Canvas is wider than A4 ratio -> fit to width
+                    w = a4Width;
+                    h = a4Width / canvasRatio;
+                    x = 0;
+                    y = (a4Height - h) / 2; // Center vertically
+                } else {
+                    // Canvas is taller than A4 ratio -> fit to height
+                    h = a4Height;
+                    w = a4Height * canvasRatio;
+                    x = (a4Width - w) / 2; // Center horizontally
+                    y = 0;
+                }
+
+                pdf.addImage(imgData, 'JPEG', x, y, w, h);
+                pdf.save('実績分析レポート_' + new Date().toISOString().substring(0, 10) + '.pdf');
+
+                // 後処理
+                document.body.removeChild(printArea);
+                document.body.removeChild(loadingOverlay);
+                window.scrollTo(originalScrollX, originalScrollY);
+            }).catch(err => {
+                console.error(err);
+                alert("PDFの出力に失敗しました。");
+                if (document.body.contains(printArea)) {
+                    document.body.removeChild(printArea);
+                }
+                if (document.body.contains(loadingOverlay)) {
+                    document.body.removeChild(loadingOverlay);
+                }
+                window.scrollTo(originalScrollX, originalScrollY);
+            });
+        };
+
+        window.onload = init;
+    </script>
+</body>
+</html>

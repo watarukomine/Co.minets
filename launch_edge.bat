@@ -1,7 +1,7 @@
 @echo off
 set "EDGE_PATH_1=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 set "EDGE_PATH_2=C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-set "USER_DATA=%~dp0edge_profile_rpa"
+set "USER_DATA=%LOCALAPPDATA%\edge_profile_rpa"
 set "URL=https://report.tmp-one.com/portal#"
 
 if exist "%EDGE_PATH_1%" (
