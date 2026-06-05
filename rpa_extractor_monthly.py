@@ -18,6 +18,10 @@ import zipfile
 import json
 import io
 
+# プロキシ自動バイパス
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+
 if sys.platform.startswith('win'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -27,6 +31,18 @@ if sys.platform.startswith('win'):
         import sys as _sys
         _sys.stdout = io.TextIOWrapper(_sys.stdout.buffer, encoding='utf-8')
         _sys.stderr = io.TextIOWrapper(_sys.stderr.buffer, encoding='utf-8')
+
+def safe_x_drive_op(op_func, *args, retries=5, delay=3, **kwargs):
+    """Xドライブ（共有ネットワークドライブ）の接続一時切断(WinError 1237等)に対応するリトライラッパー"""
+    for i in range(retries):
+        try:
+            return op_func(*args, **kwargs)
+        except OSError as e:
+            print(f"    [WARNING] Xドライブ操作失敗 (試行 {i+1}/{retries}): {e}")
+            if i < retries - 1:
+                time.sleep(delay)
+            else:
+                raise
 
 
 # ==========================================
@@ -815,6 +831,35 @@ def export_csv(driver):
 # メイン
 # ==========================================
 
+import csv
+def validate_downloaded_csv(filepath, target_year, target_month):
+    """ダウンロードされたCSV内に対象年月のデータが1行以上含まれているか確認する"""
+    target_prefix = f"{target_year:04d}-{target_month:02d}"
+    target_prefix_slash = f"{target_year:04d}/{target_month:02d}"
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            row_count = 0
+            for row in reader:
+                row_count += 1
+                date_str = row.get('日付', '')
+                if not date_str:
+                    continue
+                # 年月が含まれているか
+                if date_str.startswith(target_prefix) or date_str.startswith(target_prefix_slash):
+                    return True
+            # 行が無い場合は不整合
+            if row_count == 0:
+                print("    [警告] CSVの中身が空です（ヘッダーのみ）。")
+                return False
+    except Exception as e:
+        print(f"    [警告] CSVバリデーション実行エラー: {e}")
+        return False
+    
+    print(f"    [警告] CSV内に対象年月 {target_year}/{target_month:02d} のデータが1件も見つかりませんでした。")
+    return False
+
 def main():
     print("【TMP-ONE 月次差分データ抽出ループシステム (一時フォルダ保存版)】")
 
@@ -842,6 +887,18 @@ def main():
             target_year = now.year
             target_month = now.month - 1
         print(f"  [設定] 対象年月を自動決定しました (前月): {target_year}/{target_month:02d}")
+
+    # 不足リスト (missing_patterns.json) の読み込み
+    missing_set = None
+    missing_patterns_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), "missing_patterns.json")
+    if os.path.exists(missing_patterns_json):
+        try:
+            with open(missing_patterns_json, "r", encoding="utf-8") as f:
+                missing_data = json.load(f)
+                missing_set = set((item["amount"], item["route"], item["sales_class"]) for item in missing_data)
+                print(f"  [設定] 不足データリストから {len(missing_set)} 件の抽出指示をロードしました。ピンポイント抽出を実行します。")
+        except Exception as e:
+            print(f"  [警告] missing_patterns.json のロードに失敗しました: {e}")
 
     edge_options = Options()
     edge_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
@@ -903,6 +960,13 @@ def main():
     for amount in AMOUNT_TYPES:
         amount_changed = False
         try:
+            # もしこの金額タイプに属する不足データが1つもないなら、フィルター切り替え自体をスキップ
+            if missing_set is not None:
+                has_missing_in_amount = any(m[0] == amount for m in missing_set)
+                if not has_missing_in_amount:
+                    print(f"  [スキップ] 金額種別 {amount} に不足パターンがないためスキップします。")
+                    continue
+
             set_quicksight_filter(driver, "売上/粗利", amount)
             amount_changed = True
         except Exception as e:
@@ -912,6 +976,16 @@ def main():
             route_changed = False
             if amount_changed:
                 try:
+                    # もしこの金額＋ルートに属する不足データが1つもないなら、フィルター切り替え自体をスキップ
+                    if missing_set is not None:
+                        has_missing_in_route = any(m[0] == amount and m[1] == route for m in missing_set)
+                        if not has_missing_in_route:
+                            # 2700パターンの期待総数カウントを進めるためのダミー処理
+                            for sc in SALES_CLASSES_ALL:
+                                pattern_count += 1
+                                skip_count += 1
+                            continue
+
                     set_quicksight_filter(driver, "ルート", route)
                     route_changed = True
                 except Exception as e:
@@ -920,6 +994,12 @@ def main():
                 print(f"  [警告] 金額種別切替に失敗しているため、ルート {route} の切替をスキップします。")
 
             for sc in SALES_CLASSES_ALL:
+                # 不足リストがロードされている場合、リストに含まれないパターンは無条件スキップ
+                if missing_set is not None and (amount, route, sc) not in missing_set:
+                    pattern_count += 1
+                    skip_count += 1
+                    continue
+
                 wait_for_disk_space(threshold_gb=3.5)
                 pattern_count += 1
                 
@@ -927,7 +1007,7 @@ def main():
                 target_filename = f"【{amount}】{route}_{sc_fname}.csv"
                 target_path = os.path.join(DOWNLOAD_DIR, target_filename)
 
-                # 一時フォルダ（extracted_data_temp）および最終フォルダ（extracted_data）に既に存在するかチェック
+                # 一時フォルダおよび最終フォルダに既に存在するかチェック (Xドライブアクセスはsafe_x_drive_opで)
                 final_path_csv = os.path.join(X_DEST_DIR, target_filename)
                 final_path_zip = final_path_csv.replace(".csv", ".zip")
                 final_path_zero = os.path.join(X_DEST_DIR, f"[ZERO_DATA]{target_filename}")
@@ -939,10 +1019,12 @@ def main():
                 # 常にデータなしとなる除外パターンのチェック
                 if (route, sc) in EXCLUDE_COMBINATIONS:
                     print(f"  [除外スキップ] 常にデータなしとなる組み合わせのためスキップ: {route} - {sc}")
-                    if not os.path.exists(final_path_zero) and not os.path.exists(dest_zero_path):
+                    if not safe_x_drive_op(os.path.exists, final_path_zero) and not safe_x_drive_op(os.path.exists, dest_zero_path):
                         try:
-                            with open(final_path_zero, 'w', encoding='utf-8') as f:
-                                f.write(f"Zero data (statically excluded) at {datetime.now().isoformat()}")
+                            def _write_zero():
+                                with open(final_path_zero, 'w', encoding='utf-8') as f:
+                                    f.write(f"Zero data (statically excluded) at {datetime.now().isoformat()}")
+                            safe_x_drive_op(_write_zero)
                             print(f"  ✓ マーカーファイルを作成しました: [ZERO_DATA]{target_filename}")
                         except Exception as e:
                             print(f"  [警告] マーカーファイルの作成に失敗しました: {e}")
@@ -950,20 +1032,20 @@ def main():
                     success_count += 1
                     continue
 
-                if os.path.exists(final_path_csv) or os.path.exists(final_path_zip) or os.path.exists(final_path_zero):
-                    status = "CSV" if os.path.exists(final_path_csv) else ("ZIP" if os.path.exists(final_path_zip) else "ZERO_DATA")
+                if safe_x_drive_op(os.path.exists, final_path_csv) or safe_x_drive_op(os.path.exists, final_path_zip) or safe_x_drive_op(os.path.exists, final_path_zero):
+                    status = "CSV" if safe_x_drive_op(os.path.exists, final_path_csv) else ("ZIP" if safe_x_drive_op(os.path.exists, final_path_zip) else "ZERO_DATA")
                     print(f"  [スキップ] 既に一時フォルダに存在します({status}): {target_filename}")
                     skip_count += 1
                     success_count += 1
                     continue
 
-                if os.path.exists(dest_zero_path):
+                if safe_x_drive_op(os.path.exists, dest_zero_path):
                     print(f"  [スキップ] 既に最終フォルダにゼロデータマーカーが存在します: {target_filename}")
                     skip_count += 1
                     success_count += 1
                     continue
 
-                if check_already_extracted_in_dest(dest_zip_path, target_year, target_month):
+                if safe_x_drive_op(check_already_extracted_in_dest, dest_zip_path, target_year, target_month):
                     print(f"  [スキップ] 既に最終フォルダのZIPに当月データが含まれています ({target_year}/{target_month:02d}): {target_filename}")
                     skip_count += 1
                     success_count += 1
@@ -996,8 +1078,10 @@ def main():
                     if load_status == "ZERO_DATA":
                         print("  [情報] 画面に「データなし」を検出しました。実績0件として処理します。")
                         try:
-                            with open(final_path_zero, 'w', encoding='utf-8') as f:
-                                f.write(f"Zero data (detected on UI) at {datetime.now().isoformat()}")
+                            def _write_ui_zero():
+                                with open(final_path_zero, 'w', encoding='utf-8') as f:
+                                    f.write(f"Zero data (detected on UI) at {datetime.now().isoformat()}")
+                            safe_x_drive_op(_write_ui_zero)
                             print(f"  ✓ マーカーファイルを作成しました: [ZERO_DATA]{target_filename}")
                         except Exception as e:
                             print(f"  [警告] マーカーファイルの作成に失敗しました: {e}")
@@ -1033,6 +1117,13 @@ def main():
                                     retry_stable += 1
                                 
                                 try:
+                                    # --- 年月データバリデーションの実行 ---
+                                    if not validate_downloaded_csv(latest_file, target_year, target_month):
+                                        print("    [ERROR] ダウンロードされたCSVのデータ内容が不正です。ファイルを破棄します。")
+                                        if os.path.exists(latest_file):
+                                            os.remove(latest_file)
+                                        break  # 待機ループを抜けてタイムアウト失敗とする
+                                    
                                     if os.path.exists(target_path):
                                         os.remove(target_path)
                                     os.rename(latest_file, target_path)
@@ -1043,7 +1134,9 @@ def main():
                                         zf.write(target_path, arcname=target_filename)
                                     
                                     os.remove(target_path)
-                                    shutil.move(zip_path, final_path_zip)
+                                    
+                                    # Xドライブへの書き込み・移動はリトライ対応
+                                    safe_x_drive_op(shutil.move, zip_path, final_path_zip)
                                     print(f"  ✓ ZIP圧縮して一時保存先へ移動完了: {os.path.basename(final_path_zip)}")
                                     
                                     downloaded = True
@@ -1057,20 +1150,21 @@ def main():
                             
                             time.sleep(2)
                         
-                        else:
-                            print("  [警告] ファイルの書き出しが確認できませんでした。")
+                        if not downloaded:
+                            print("  [警告] ファイルの書き出しまたはデータバリデーションに失敗しました。")
                             fail_count += 1
                             failed_patterns.append({
                                 "pattern": target_filename,
-                                "reason": "CSVエクスポートは押せましたが、ダウンロード完了が確認できませんでした（タイムアウト）。"
+                                "reason": "CSVエクスポート後のダウンロード完了が確認できないか、データ年月のバリデーションに失敗しました。"
                             })
-                        
-                        if downloaded:
+                        else:
                             success_count += 1
                     elif res == "ZERO_DATA":
                         print(f"  [情報] 実績0件と判定しました。マーカーファイルを作成します。")
-                        with open(final_path_zero, 'w', encoding='utf-8') as f:
-                            f.write(f"Zero data detected at {datetime.now().isoformat()}")
+                        def _write_ui_zero_alt():
+                            with open(final_path_zero, 'w', encoding='utf-8') as f:
+                                f.write(f"Zero data detected at {datetime.now().isoformat()}")
+                        safe_x_drive_op(_write_ui_zero_alt)
                         success_count += 1
                     else:
                         fail_count += 1
@@ -1103,6 +1197,7 @@ def main():
     }
     report_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extraction_report.json")
     try:
+        # ローカルファイルなので通常保存
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2)
         print(f"  ✓ 抽出レポートを保存しました: {report_path}")

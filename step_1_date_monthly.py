@@ -11,6 +11,21 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# プロキシ自動バイパス
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+
+# 標準出力を即座にフラッシュ、かつUTF-8に再構成（Windowsのエンコーディングエラー回避）
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+        sys.stderr.reconfigure(encoding='utf-8', line_buffering=True)
+    except AttributeError:
+        import io
+        import sys as _sys
+        _sys.stdout = io.TextIOWrapper(_sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+        _sys.stderr = io.TextIOWrapper(_sys.stderr.buffer, encoding='utf-8', line_buffering=True)
+
 def get_target_period(target_arg=None):
     # デフォルトは前月
     now = datetime.now()
@@ -277,7 +292,12 @@ def run_monthly_date_set(target_arg=None, is_auto=False):
         except Exception as e:
             print(f"  [警告] ウィンドウの最大化に失敗しました: {e}")
     except Exception as e:
-        print(f"[エラー] Edgeブラウザへの接続に失敗しました。Edgeがデバッグモード(9222ポート)で起動しているか確認してください。: {e}")
+        print(f"[エラー] Edgeブラウザへの接続に失敗しました。以下の可能性を確認してください:")
+        print("  1. Edgeが完全に終了していない状態で launch_edge.bat を実行した可能性があります。")
+        print("     すべてのEdgeウィンドウを閉じてから launch_edge.bat を再実行してください。")
+        print("  2. launch_edge.bat が起動していない可能性があります。")
+        print("  3. 9222ポートが別のプロセスで使用されている可能性があります。")
+        print(f"  [エラー詳細]: {e}")
         sys.exit(1)
         
     # 自動ログインおよびダッシュボード遷移処理を含めてダッシュボードを確保する

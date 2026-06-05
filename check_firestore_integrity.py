@@ -23,8 +23,8 @@ def check_doc():
     db_id = "cominets"
     # UIが取得しているドキュメントを模倣
     # 例: 売上_a-00総販_100_総売上 (神奈川支社)
-    doc_id = "売上_a-00総販_100_総売上"
-    branch = "神奈川支社"
+    doc_id = "%E5%A3%B2%E4%B8%8A_a-00%E7%B7%8F%E8%B2%A9_100_%E7%B7%8F%E5%A3%B2%E4%B8%8A"
+    branch = "%E7%A5%9E%E5%A5%88%E5%B7%9D%E6%94%AF%E7%A4%BE"
     
     url = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/{db_id}/documents/dashboard_data/{doc_id}/branches/{branch}"
     
