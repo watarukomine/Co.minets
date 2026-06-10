@@ -315,7 +315,10 @@
                 return window.missingPatterns.some(p => 
                     p.amount === currentMetric && 
                     p.route === route && 
-                    p.sales_class === categoryName
+                    p.sales_class === categoryName &&
+                    (p.reason === "Xドライブにファイルが存在しません。" || 
+                     p.reason === "Firestoreへの同期が完了していません。" ||
+                     (p.reason && p.reason.indexOf("破損") !== -1))
                 );
             });
         }
