@@ -227,6 +227,16 @@ def process_merge():
                 # 既存のZIPが存在する場合はマージ
                 print(f"  [マージ処理] {dest_filename} ...")
                 
+                # 安全策：マージ前に既存ファイルをバックアップフォルダへ退避
+                try:
+                    backup_dir = os.path.join(DEST_DIR, "backups")
+                    if not os.path.exists(backup_dir):
+                        os.makedirs(backup_dir)
+                    backup_path = os.path.join(backup_dir, dest_filename)
+                    shutil.copy2(dest_file_path, backup_path)
+                except Exception as e:
+                    print(f"  [警告] マージ前の自動バックアップに失敗しました（処理は継続します）: {e}")
+                
                 exist_content, _ = read_zip_csv(dest_file_path)
                 
                 # マージ

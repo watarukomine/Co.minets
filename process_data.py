@@ -114,7 +114,7 @@ def sync_to_cloud_full(metadata, metric, route, cls, branches):
             requests.patch(update_time_url, json={"fields": {"updatedAt": {"stringValue": metadata["updatedAt"]}}}, headers=headers, timeout=10)
         except: pass
 
-    batch_limit = 5  # トランザクションサイズエラー回避のための小さなバッチサイズ
+    batch_limit = 2  # ネットワーク負荷とタイムアウト軽減のためバッチサイズを2に縮小
     writes = []
     
     def commit_batch(w_list):
@@ -125,13 +125,13 @@ def sync_to_cloud_full(metadata, metric, route, cls, branches):
         url = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/{db_id}/documents:commit"
         headers_local = {"Authorization": f"Bearer {tk_local}", "Content-Type": "application/json"}
         try:
-            res = requests.post(url, json={"writes": w_list}, headers=headers_local, timeout=20)
+            res = requests.post(url, json={"writes": w_list}, headers=headers_local, timeout=45)
             if res.status_code == 401:
                 print(f"  [INFO] トークン失効を検知。再取得してリトライします... ({doc_id})", flush=True)
                 tk_local = get_valid_token(force_refresh=True)
                 if not tk_local: return False
                 headers_local["Authorization"] = f"Bearer {tk_local}"
-                res = requests.post(url, json={"writes": w_list}, headers=headers_local, timeout=20)
+                res = requests.post(url, json={"writes": w_list}, headers=headers_local, timeout=45)
                 
             if res.status_code != 200:
                 print(f"  [ERROR] Commit failed for {doc_id}: {res.status_code} {res.text}", flush=True)
@@ -257,7 +257,7 @@ def process_single_file(f_name, total_files, local_only=False):
             sync_success = True
         else:
             sync_success = False
-            max_retries = 2
+            max_retries = 3
             for attempt in range(max_retries):
                 try:
                     if sync_to_cloud_full(progress, metric, route, classification, branch_matrix):
@@ -267,7 +267,7 @@ def process_single_file(f_name, total_files, local_only=False):
                         raise ConnectionError("Firestore commit failed")
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(3)
                     else:
                         print(f"  [ERROR] {f_name} 同期失敗: {e}", flush=True)
 
@@ -318,6 +318,52 @@ def run_once(local_only=False, force_full=False, skip_scan=False):
     else:
         print("[ERROR] ネットワークドライブへの接続を確立できませんでした。処理を中断します。", flush=True)
         sys.exit(1)
+
+    # 重複排除: 同じ doc_id で正規ファイル (ZIP/CSV) と [ZERO_DATA] の両方が存在する場合、[ZERO_DATA] を除外する
+    doc_id_to_files = {}
+    for f in target_files:
+        try:
+            clean_name = f.replace("[ZERO_DATA]", "")
+            metric = clean_name.split('】')[0].replace('【', '')
+            rest = clean_name.split('】')[1].replace('.csv', '').replace('.zip', '')
+            rest = rest.replace('鉱油', '礦油')
+            route, classification = rest.split('_', 1) if '_' in rest else (rest, "全体")
+            doc_id = f"{metric}_{route}_{classification}".replace("/", "-").replace(" ", "")
+            if doc_id not in doc_id_to_files:
+                doc_id_to_files[doc_id] = []
+            doc_id_to_files[doc_id].append(f)
+        except Exception:
+            # パース失敗したファイルはそのまま残す
+            doc_id = f
+            if doc_id not in doc_id_to_files:
+                doc_id_to_files[doc_id] = []
+            doc_id_to_files[doc_id].append(f)
+
+    filtered_files = []
+    for doc_id, files_list in doc_id_to_files.items():
+        # 優先順位でソートして1つだけ選択する
+        # 1. normal ZIP, 2. normal CSV, 3. ZERO_DATA
+        best_file = None
+        for f in files_list:
+            if not f.startswith("[ZERO_DATA]") and f.endswith(".zip"):
+                best_file = f
+                break
+        if not best_file:
+            for f in files_list:
+                if not f.startswith("[ZERO_DATA]") and f.endswith(".csv"):
+                    best_file = f
+                    break
+        if not best_file:
+            for f in files_list:
+                if f.startswith("[ZERO_DATA]"):
+                    best_file = f
+                    break
+        if not best_file and files_list:
+            best_file = files_list[0]
+            
+        if best_file:
+            filtered_files.append(best_file)
+    target_files = filtered_files
 
     if not target_files:
         print("[INFO] 対象フォルダに処理対象のCSV/ZIPが見つかりません。", flush=True)
@@ -510,11 +556,11 @@ def run_once(local_only=False, force_full=False, skip_scan=False):
     }
     _save_sync_progress_safe(progress)
 
-    # --- Pass 2: 個別データの処理とアップロード (16スレッド並列実行) ---
-    print(f"[PASS 2] 個別データの処理と同期を開始 (16スレッド並列)...", flush=True)
+    # --- Pass 2: 個別データの処理とアップロード (4スレッド並列実行) ---
+    print(f"[PASS 2] 個別データの処理と同期を開始 (4スレッド並列)...", flush=True)
     total_files = len(target_files)
     
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         for f_name in target_files:
             executor.submit(process_single_file, f_name, total_files, local_only=local_only)
 
