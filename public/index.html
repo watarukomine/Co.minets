@@ -715,7 +715,7 @@
                         console.warn("Failed to fetch route mapping, fallback to empty", err);
                         return { ok: false };
                     }),
-                    fetchWithTimeout("./missing_patterns.json").catch(err => {
+                    fetchWithTimeout("./missing_patterns.json?v=" + new Date().getTime()).catch(err => {
                         console.warn("Failed to fetch missing patterns, fallback to empty", err);
                         return { ok: false };
                     })
