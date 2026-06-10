@@ -305,6 +305,20 @@
         let chart = null, breakdownChart = null;
         let selection = { metric: "売上", branches: [], routes: [], categories: [], granularity: "month", displayMode: "detailed", startDate: "", endDate: "", unit: 1, compareMode: "normal", startDateA: "2025-04-01", endDateA: "2026-03-31", startDateB: "2023-04-01", endDateB: "2024-03-31", selectedYears: [], activeTab: 'trend', translateCategories: false };
         let activePicker = null, pickerItems = [], tempSelected = [];
+        window.missingPatterns = [];
+
+        function isCategoryMissing(categoryName) {
+            if (!window.missingPatterns || window.missingPatterns.length === 0) return false;
+            const currentMetric = selection.metric;
+            const currentRoutes = selection.routes;
+            return currentRoutes.some(route => {
+                return window.missingPatterns.some(p => 
+                    p.amount === currentMetric && 
+                    p.route === route && 
+                    p.sales_class === categoryName
+                );
+            });
+        }
 
         // Universal Fetch with Timeout (Old-school approach for max compatibility)
         function fetchWithTimeout(url, timeout = 10000) {
@@ -688,7 +702,7 @@
             setTimeout(hideLoading, 6000);
 
             try {
-                const [res, mappingRes, routeMappingRes] = await Promise.all([
+                const [res, mappingRes, routeMappingRes, missingRes] = await Promise.all([
                     fetchWithTimeout(BASE_URL + "/dashboard_metadata/current"),
                     fetchWithTimeout(BASE_URL + "/dashboard_metadata/category_mapping").catch(err => {
                         console.warn("Failed to fetch category mapping, fallback to empty", err);
@@ -696,6 +710,10 @@
                     }),
                     fetchWithTimeout(BASE_URL + "/dashboard_metadata/route_mapping").catch(err => {
                         console.warn("Failed to fetch route mapping, fallback to empty", err);
+                        return { ok: false };
+                    }),
+                    fetchWithTimeout("./missing_patterns.json").catch(err => {
+                        console.warn("Failed to fetch missing patterns, fallback to empty", err);
                         return { ok: false };
                     })
                 ]);
@@ -736,6 +754,15 @@
                         }
                     } catch (err) {
                         console.error("Error parsing route mapping", err);
+                    }
+                }
+
+                window.missingPatterns = [];
+                if (missingRes && missingRes.ok) {
+                    try {
+                        window.missingPatterns = await missingRes.json();
+                    } catch (err) {
+                        console.error("Error parsing missing patterns", err);
                     }
                 }
                 
@@ -2195,6 +2222,11 @@
                 let displayText = it;
                 if (type === 'category') displayText = translateCategory(it);
                 else if (type === 'route') displayText = translateRoute(it);
+                
+                const isMissing = type === 'category' && isCategoryMissing(it);
+                if (isMissing) {
+                    return '<span class="chip bg-red-50 text-red-500 border-red-200/50 opacity-60">' + displayText + ' (データ不足)</span>';
+                }
                 return '<span class="chip">' + displayText + '</span>';
             }).join('');
         }
@@ -2538,12 +2570,19 @@
                 let displayText = item;
                 if (activePicker === 'category') displayText = translateCategory(item);
                 else if (activePicker === 'route') displayText = translateRoute(item);
+                
+                const isMissing = activePicker === 'category' && isCategoryMissing(item);
+                if (isMissing) {
+                    return '<div class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between opacity-40 bg-slate-100/50 text-slate-400 cursor-not-allowed pointer-events-none"><span class="text-sm font-black">'+displayText+' <span class="text-[10px] font-normal text-slate-400 block -mt-0.5">（データ不足のため選択不可）</span></span></div>';
+                }
+                
                 return '<div onclick="toggleItem(\''+item+'\')" class="list-item p-4 rounded-2xl mb-1 flex items-center justify-between cursor-pointer '+(isS?'list-item-selected':'text-slate-600')+'"><span class="text-sm font-black">'+displayText+'</span>'+(isS?'<i data-lucide="check" class="w-5 h-5"></i>':'')+'</div>';
             }).join('');
             lucide.createIcons();
         }
         
         window.toggleItem = function(it) {
+            if (activePicker === 'category' && isCategoryMissing(it)) return;
             const idx = tempSelected.indexOf(it);
             if(idx>-1) tempSelected.splice(idx,1); else tempSelected.push(it);
             filterPicker();
