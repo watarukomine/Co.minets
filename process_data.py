@@ -11,6 +11,9 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import socket
+socket.setdefaulttimeout(15)
+
 # プロキシを自動バイパス（インターネットへの直接接続を優先）
 os.environ['NO_PROXY'] = '*'
 os.environ['no_proxy'] = '*'
@@ -66,19 +69,27 @@ def get_access_token():
         return None
 
 def get_valid_token(force_refresh=False):
-    """スレッドセーフな有効トークンの取得と自動更新"""
+    """スレッドセーフな有効トークンの取得と自動更新 (ロック外IO堅牢化版)"""
     global global_token, token_expires_at
+    now = time.time()
+    
     with token_lock:
-        now = time.time()
-        if force_refresh or not global_token or now >= token_expires_at - 300:
-            print("[INFO] アクセストークンを更新中...", flush=True)
-            for attempt in range(3):
-                new_token = get_access_token()
-                if new_token:
-                    global_token = new_token
-                    token_expires_at = now + 3600
-                    break
-                time.sleep(2)
+        need_refresh = force_refresh or not global_token or now >= token_expires_at - 300
+        
+    if need_refresh:
+        new_token = None
+        for attempt in range(3):
+            new_token = get_access_token()
+            if new_token:
+                break
+            time.sleep(2)
+            
+        if new_token:
+            with token_lock:
+                global_token = new_token
+                token_expires_at = time.time() + 3600
+                
+    with token_lock:
         return global_token
 
 def _load_sync_progress():
@@ -195,14 +206,17 @@ def _process_row(row, raw_data):
     try:
         branch = row.get('支社', row.get('管轄支社名', '')).strip()
         if not branch: return
-        date_str = row.get('日付', '').split(' ')[0]
+        date_str = row.get('日付', '').split(' ')[0].replace('/', '-').strip()
         if not date_str: return
         cur_str = row.get('当年', '0').replace(',', '').strip()
         prev_str = row.get('前年', '0').replace(',', '').strip()
         current = float(cur_str) if cur_str else 0.0
         previous = float(prev_str) if prev_str else 0.0
         if branch not in raw_data: raw_data[branch] = {}
-        raw_data[branch][date_str] = {'current': current, 'previous': previous}
+        if date_str not in raw_data[branch]:
+            raw_data[branch][date_str] = {'current': 0.0, 'previous': 0.0}
+        raw_data[branch][date_str]['current'] += current
+        raw_data[branch][date_str]['previous'] += previous
     except Exception:
         pass
 
@@ -221,36 +235,52 @@ def process_single_file(f_name, total_files, local_only=False):
                 skip_count += 1
                 return
 
-        if f_name.startswith("[ZERO_DATA]"):
-            with lock:
-                completed_set.add(doc_id)
-                progress["completed"] = list(completed_set)
-                success_count += 1
-            return
-
-        filepath = os.path.join(DOWNLOAD_DIR, f_name)
-        data = process_csv_to_matrix(filepath)
-        if not data:
-            with lock:
-                fail_count += 1
-                failed_details.append(f"{f_name}: データ読み込み失敗")
-            return
-
-        # タイムラインに沿って整形
         timeline = progress["timeline"]
         branch_matrix = {}
-        for branch, date_map in data.items():
-            cl, pl = [], []
-            for d in timeline:
-                vals = date_map.get(d, {'current': 0, 'previous': 0})
-                cl.append(vals['current'])
-                pl.append(vals['previous'])
-            branch_matrix[branch] = {'current': cl, 'previous': pl}
+
+        if f_name.startswith("[ZERO_DATA]"):
+            branch_matrix["85371 神奈川支社"] = {
+                "current": [0.0] * len(timeline),
+                "previous": [0.0] * len(timeline)
+            }
+        else:
+            filepath = os.path.join(DOWNLOAD_DIR, f_name)
+            data = process_csv_to_matrix(filepath)
+            if data is None:
+                with lock:
+                    fail_count += 1
+                    failed_details.append(f"{f_name}: データ読み込み失敗")
+                return
+
+            target_branch = "85371 神奈川支社"
+            if target_branch not in data:
+                data[target_branch] = {}
+
+            for branch, date_map in data.items():
+                cl, pl = [], []
+                for d in timeline:
+                    vals = date_map.get(d, {'current': 0.0, 'previous': 0.0})
+                    cl.append(vals['current'])
+                    pl.append(vals['previous'])
+                branch_matrix[branch] = {'current': cl, 'previous': pl}
 
         # 1. 個別JSON保存（ローカル）
         fid = doc_id
-        with open(os.path.join(DATA_DIR, f"{fid}.json"), 'w', encoding='utf-8') as f:
-            json.dump(branch_matrix, f, ensure_ascii=False)
+        from pathlib import Path
+        filepath_json = Path(DATA_DIR) / f"{fid}.json"
+        
+        success_write = False
+        for attempt in range(5):
+            try:
+                with open(filepath_json, 'w', encoding='utf-8') as f:
+                    json.dump(branch_matrix, f, ensure_ascii=False)
+                success_write = True
+                break
+            except OSError as e:
+                print(f"  [WARNING] JSON保存失敗 (試行 {attempt+1}/5): {e} for {filepath_json}", flush=True)
+                time.sleep(2)
+        if not success_write:
+            raise OSError(f"JSON保存に最終的に失敗しました: {filepath_json}")
 
         # 2. クラウド同期（フル同期）
         if local_only:
@@ -495,7 +525,11 @@ def run_once(local_only=False, force_full=False, skip_scan=False):
             print("[ERROR] 有効なデータが見つかりませんでした。", flush=True)
             return
 
-        timeline = sorted(list(all_dates))
+        import datetime
+        start_date = datetime.date(2019, 4, 1)
+        end_date = datetime.date(2026, 6, 7)
+        delta_days = (end_date - start_date).days
+        timeline = [(start_date + datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(delta_days + 1)]
         metadata = {
             "updatedAt": updated_at,
             "timeline": timeline,
@@ -556,11 +590,11 @@ def run_once(local_only=False, force_full=False, skip_scan=False):
     }
     _save_sync_progress_safe(progress)
 
-    # --- Pass 2: 個別データの処理とアップロード (4スレッド並列実行) ---
-    print(f"[PASS 2] 個別データの処理と同期を開始 (4スレッド並列)...", flush=True)
+    # --- Pass 2: 個別データの処理とアップロード (16スレッド並列実行) ---
+    print(f"[PASS 2] 個別データの処理と同期を開始 (16スレッド並列)...", flush=True)
     total_files = len(target_files)
     
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         for f_name in target_files:
             executor.submit(process_single_file, f_name, total_files, local_only=local_only)
 

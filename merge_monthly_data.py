@@ -7,6 +7,7 @@ import zipfile
 import traceback
 import json
 import time
+import ctypes
 
 # プロキシ自動バイパス
 os.environ['NO_PROXY'] = '*'
@@ -27,6 +28,53 @@ def safe_x_drive_op(op_func, *args, retries=5, delay=3, **kwargs):
             else:
                 raise
 
+def get_free_space_gb(drive_path):
+    """指定したパスのドライブの空き容量をGBで返す (Windows API対応)"""
+    try:
+        if hasattr(ctypes, "windll"):
+            free_bytes = ctypes.c_ulonglong(0)
+            root = os.path.splitdrive(drive_path)[0] + "\\"
+            ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+                ctypes.c_wchar_p(root), None, None, ctypes.byref(free_bytes)
+            )
+            return free_bytes.value / (1024**3)
+        else:
+            total, used, free = shutil.disk_usage(drive_path)
+            return free / (1024**3)
+    except Exception as e:
+        print(f"  [WARNING] 空き容量チェック失敗: {e}")
+        return 999.0 # チェック失敗時は安全のため十分な空きがあるものとみなす
+
+def normalize_filename(name):
+    """ファイル名の揺れ（スペース、カッコ）を排除して小文字化"""
+    n = name.replace(" ", "").replace("　", "")
+    n = n.replace("(", "（").replace(")", "）")
+    return n.lower()
+
+def find_file_in_dir(directory, filename):
+    """表記揺れを許容してディレクトリ内から実ファイル名を検索"""
+    if not os.path.exists(directory):
+        return None
+    target_norm = normalize_filename(filename)
+    for f in os.listdir(directory):
+        if normalize_filename(f) == target_norm:
+            return f
+    return None
+
+def rollback_file(dest_file_path, backup_path):
+    """マージ処理失敗時にバックアップファイルから安全に書き戻す"""
+    print(f"  [ROLLBACK] 処理失敗のためバックアップから復旧します: {os.path.basename(dest_file_path)}")
+    try:
+        if os.path.exists(dest_file_path):
+            os.remove(dest_file_path)
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, dest_file_path)
+            print("  [ROLLBACK] 復旧が完了しました。")
+        else:
+            print("  [ROLLBACK] 警告: バックアップファイルが見つかりません。")
+    except Exception as e:
+        print(f"  [ROLLBACK] [FATAL] ロールバック復旧に失敗しました: {e}")
+
 def load_target_month_str():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(base_dir, "target_month.json")
@@ -45,7 +93,7 @@ def load_target_month_str():
 def validate_csv_content(csv_content, target_month_str):
     """CSVデータ内に対象年月のレコードが1件以上含まれているか確認する"""
     if not target_month_str:
-        return True # 対象年月が特定できない場合はスルー
+        return True
         
     target_prefix = target_month_str
     target_prefix_slash = target_month_str.replace("-", "/")
@@ -63,7 +111,6 @@ def validate_csv_content(csv_content, target_month_str):
             
     if row_count == 0:
         return False
-        
     return False
 
 def normalize_date(d_str):
@@ -92,6 +139,11 @@ def read_zip_csv(zip_path):
             return f.read().decode('utf-8-sig'), csv_filename
 
 def write_zip_csv(zip_path, csv_content, csv_filename):
+    """ZIPファイルへの書き出し (ディスク空き容量チェック付き)"""
+    free_gb = get_free_space_gb(zip_path)
+    if free_gb < 5.0:
+        raise OSError(f"ディスク容量が不足しています ({free_gb:.2f} GB)。マージ書き出しを中断します。")
+        
     temp_zip = zip_path + ".tmp"
     try:
         with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -119,12 +171,10 @@ def merge_csv_content(exist_content, new_content):
     merged = {}
     fields = list(exist_fields) if exist_fields else ['支社', '日付', '当年', '前年']
     
-    # ヘッダーフィールドの補完
     for f in new_fields:
         if f not in fields:
             fields.append(f)
 
-    # 既存データのロード
     for row in exist_rows:
         _, branch = get_branch_field(row)
         date_str = normalize_date(row.get('日付', ''))
@@ -132,7 +182,6 @@ def merge_csv_content(exist_content, new_content):
             row['日付'] = date_str
             merged[(branch, date_str)] = row
 
-    # 新規データのマージ (重複は上書き)
     for row in new_rows:
         _, branch = get_branch_field(row)
         date_str = normalize_date(row.get('日付', ''))
@@ -140,7 +189,6 @@ def merge_csv_content(exist_content, new_content):
             row['日付'] = date_str
             merged[(branch, date_str)] = row
 
-    # 日付昇順、支社名昇順でソート
     sorted_keys = sorted(merged.keys(), key=lambda x: (x[1], x[0]))
 
     output = io.StringIO()
@@ -152,11 +200,18 @@ def merge_csv_content(exist_content, new_content):
     return output.getvalue()
 
 def process_merge():
-    print("【データマージ処理を開始します】")
+    print("【堅牢化マージ処理を開始します】")
     target_month_str = load_target_month_str()
     print(f"  [情報] 対象年月: {target_month_str}")
 
-    # 不足リスト (missing_patterns.json) のロード
+    # ディスク空き容量の事前確認
+    free_gb_src = get_free_space_gb(SRC_DIR)
+    free_gb_dest = get_free_space_gb(DEST_DIR)
+    print(f"  [容量チェック] 送り元: {free_gb_src:.2f} GB | 送り先: {free_gb_dest:.2f} GB")
+    if free_gb_dest < 5.0:
+        print(f"[FATAL] 送り先ドライブの空き容量が不足しています ({free_gb_dest:.2f} GB)。処理を中断します。")
+        return
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     missing_patterns_json = os.path.join(base_dir, "missing_patterns.json")
     missing_list = []
@@ -167,7 +222,6 @@ def process_merge():
         except Exception as e:
             print(f"  [警告] missing_patterns.json のロードに失敗しました: {e}")
 
-    # 元の不足ファイル名セット
     processed_filenames = set()
 
     if not safe_x_drive_op(os.path.exists, SRC_DIR):
@@ -193,7 +247,6 @@ def process_merge():
             dest_zip_name = clean_name.replace(".csv", ".zip")
             dest_zip_path = os.path.join(DEST_DIR, dest_zip_name)
             
-            # すでに過去の正規データがある場合でも、今月の0件マーカーをコピーして両存させる
             try:
                 safe_x_drive_op(shutil.copy2, os.path.join(SRC_DIR, f_name), os.path.join(DEST_DIR, f_name))
                 if safe_x_drive_op(os.path.exists, dest_zip_path):
@@ -211,55 +264,73 @@ def process_merge():
             continue
 
         src_file_path = os.path.join(SRC_DIR, f_name)
-        # 最終保存先ではZIP形式で統一する
         dest_filename = f_name.replace(".csv", ".zip")
         dest_file_path = os.path.join(DEST_DIR, dest_filename)
 
         try:
-            # 新規CSV内容をロードして年月バリデーション
             new_content, csv_filename = read_zip_csv(src_file_path)
             
-            # 対象年月データが含まれているかチェック
             if not validate_csv_content(new_content, target_month_str):
-                raise ValueError(f"CSV内に対象年月 {target_month_str} のデータが1件も含まれていません。またはデータが空です。")
+                raise ValueError(f"CSV内に対象年月 {target_month_str} のデータが1件も含まれていません。")
 
-            if safe_x_drive_op(os.path.exists, dest_file_path):
-                # 既存のZIPが存在する場合はマージ
+            # 既存ファイルの検証（ネットワーク瞬断による誤上書き防止）
+            is_exists = safe_x_drive_op(os.path.exists, dest_file_path)
+            
+            # 表記揺れ（スペース等）によるファイル存在の追加二重チェック
+            if not is_exists:
+                actual_name = find_file_in_dir(DEST_DIR, dest_filename)
+                if actual_name:
+                    is_exists = True
+                    dest_file_path = os.path.join(DEST_DIR, actual_name)
+                    print(f"  [ALERT] 存在判定を修正: 表記揺れファイルを発見しました -> {actual_name}")
+
+            if is_exists:
+                # マージ処理ルート
                 print(f"  [マージ処理] {dest_filename} ...")
                 
-                # 安全策：マージ前に既存ファイルをバックアップフォルダへ退避
+                # 安全な自動バックアップ
+                backup_dir = os.path.join(DEST_DIR, "backups")
+                if not os.path.exists(backup_dir):
+                    os.makedirs(backup_dir)
+                backup_path = os.path.join(backup_dir, dest_filename)
+                shutil.copy2(dest_file_path, backup_path)
+                
+                # マージ・書き込み実行とロールバックハンドリング
                 try:
-                    backup_dir = os.path.join(DEST_DIR, "backups")
-                    if not os.path.exists(backup_dir):
-                        os.makedirs(backup_dir)
-                    backup_path = os.path.join(backup_dir, dest_filename)
-                    shutil.copy2(dest_file_path, backup_path)
+                    exist_content, _ = read_zip_csv(dest_file_path)
+                    merged_content = merge_csv_content(exist_content, new_content)
+                    write_zip_csv(dest_file_path, merged_content, csv_filename)
+                    success_count += 1
+                    processed_filenames.add(csv_filename)
                 except Exception as e:
-                    print(f"  [警告] マージ前の自動バックアップに失敗しました（処理は継続します）: {e}")
-                
-                exist_content, _ = read_zip_csv(dest_file_path)
-                
-                # マージ
-                merged_content = merge_csv_content(exist_content, new_content)
-                
-                # 上書き保存
-                write_zip_csv(dest_file_path, merged_content, csv_filename)
-                success_count += 1
-                processed_filenames.add(csv_filename)
+                    print(f"  [ERROR] マージ中の例外発生: {e}")
+                    rollback_file(dest_file_path, backup_path)
+                    raise e
             else:
-                # 既存データがない場合はそのままコピー
+                # 新規コピールート
+                # 最終安全チェック：コピー直前に本当にコピー先に同名ファイル（表記揺れ含む）がないか再確認
+                recheck_name = find_file_in_dir(DEST_DIR, dest_filename)
+                if recheck_name:
+                    raise FileExistsError(f"新規コピーを拒否しました。実際にはファイルが存在しています: {recheck_name}")
+
                 print(f"  [新規コピー] {dest_filename} ...")
+                # コピー前の容量チェック
+                free_gb = get_free_space_gb(dest_file_path)
+                if free_gb < 5.0:
+                    raise OSError(f"空き容量不足のため新規コピーをブロックしました ({free_gb:.2f} GB)")
+                    
                 safe_x_drive_op(shutil.copy2, src_file_path, dest_file_path)
                 success_count += 1
                 processed_filenames.add(csv_filename)
+
         except Exception as e:
-            print(f"  [エラー] {f_name} のマージまたはバリデーション失敗: {e}")
+            print(f"  [ERROR] {f_name} の処理失敗: {e}")
             traceback.print_exc()
             error_count += 1
 
     print(f"\nマージ処理完了: 成功 {success_count} 件 / スキップ {skip_count} 件 / エラー {error_count} 件")
 
-    # 不足リストの更新と保存
+    # 不足リストの更新
     if missing_list:
         new_missing_list = [item for item in missing_list if item["filename"] not in processed_filenames]
         if len(new_missing_list) != len(missing_list):
@@ -270,7 +341,7 @@ def process_merge():
             except Exception as e:
                 print(f"  [警告] missing_patterns.json の更新保存失敗: {e}")
 
-    # 処理が完了し、エラーがなければ一時フォルダをクリーンアップ
+    # エラーがない場合のみ一時フォルダをクリーンアップ
     if error_count == 0:
         print("\n[一時フォルダのクリーンアップを開始します]")
         for f_name in temp_files:
@@ -280,7 +351,7 @@ def process_merge():
                 print(f"  [警告] 一時ファイルの削除に失敗: {f_name} ({e})")
         print("一時フォルダのクリーンアップが完了しました。")
     else:
-        print("\n[警告] エラーが発生したため、一時フォルダのクリーンアップはスキップしました。データを調査してください。")
+        print("\n[警告] エラーが発生したため、一時フォルダのクリーンアップはスキップしました。")
 
 if __name__ == "__main__":
     process_merge()

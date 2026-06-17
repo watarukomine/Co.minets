@@ -699,14 +699,14 @@ def main():
                     while retry_count <= max_retries:
                         set_quicksight_filter(driver, "販売区分", sc)
                         print("  データロード待機中...")
-                        load_status = wait_for_data_load(driver, old_table=old_table, timeout=15)
+                        load_status = wait_for_data_load(driver, old_table=old_table, timeout=60)
                         
-                        if load_status == "ZERO_DATA":
+                        if load_status in ["ZERO_DATA", "TIMEOUT"]:
                             is_must_have_data = (route == "a-00") or ("a-00" in route) or (route == "すべて")
                             if is_must_have_data and retry_count < max_retries:
                                 retry_count += 1
-                                print(f"  [警告] 主要ルート「{route}」で「データなし」を誤検出した可能性があります。ロード遅延とみなして 10 秒待機後にリトライします ({retry_count}/{max_retries})...")
-                                time.sleep(10)
+                                print(f"  [警告] 主要ルート「{route}」で「データなし」またはタイムアウトを検出しました。ロード遅延とみなして 15 秒待機後にリトライします ({retry_count}/{max_retries})...")
+                                time.sleep(15)
                                 try: old_table = driver.find_element(By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]")
                                 except: pass
                                 continue

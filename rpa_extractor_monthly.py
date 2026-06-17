@@ -194,51 +194,32 @@ def check_already_extracted_in_dest(dest_zip_path, target_year, target_month):
     return False
 
 def wait_for_data_load(driver, old_table=None, timeout=15):
-    """
-    フィルター適用後、データがロードされるのを待機する。
-    データなしメッセージが検出された場合は 'ZERO_DATA' を返し、
-    テーブルデータが正常に表示された場合は 'DATA_PRESENT' を返す。
-    タイムアウトした場合は 'TIMEOUT' を返す。
-    """
+    import time
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.common.by import By
+
     start_time = time.time()
-    
-    # 1. 旧テーブルが指定されている場合、それがStale（DOMから離脱）するのを待つ
     if old_table:
         try:
-            # ページ遷移・ロードが始まるまでに少しラグがあるため、
-            # 最大5秒間、旧テーブルが無効（stale）になるのを待機する
             WebDriverWait(driver, 5).until(EC.staleness_of(old_table))
-            print("    [情報] 旧テーブル要素の消失（リロード開始）を確認しました。")
-        except TimeoutException:
-            # タイムアウトした場合は、すでにロード完了しているか、データ変更がなく更新が発生しなかったとみなす
-            print("    [情報] 旧テーブル要素の消失が確認できませんでした（更新なし、またはすでに完了）。")
-        except Exception as e:
-            print(f"    [情報] 旧テーブル要素の監視中に例外が発生しました（無視して進みます）: {e}")
+        except:
+            pass
 
-    # Shadow DOMも含めてページ全体から「データなし」系の文言を検索するJS
     check_zero_data_js = """
     function hasZeroDataText(root) {
         const targets = [
-            '表示するデータはありません',
-            '表示するデータがありません',
-            '表示データはありません',
-            '表示データがありません',
-            'データがありません',
-            'データはありません',
-            'データ無し',
-            'データなし',
-            'ビジュアルのデータが見つかりません',
-            'データが見つかりません',
-            'No data'
+            '表示するデータはありません', '表示するデータがありません', '表示データはありません', '表示データがありません',
+            'データがありません', 'データはありません', 'データ無し', 'データなし', 'ビジュアルのデータが見つかりません',
+            'データが見つかりません', 'No data'
         ];
         let found = false;
         const walk = n => {
             if(!n || found) return;
             let t = '';
             try {
-                t = (n.nodeType === 3 ? n.textContent : (n.nodeType === 1 ? (n.innerText || '') : ''));
+                t = (n.nodeType === 3 ? n.textContent : (n.nodeType === 1 ? (n.innerText || '') : '')).trim();
                 if (t) {
-                    t = t.trim();
                     for (let target of targets) {
                         if (t.includes(target)) {
                             if (n.nodeType === 3 || n.children.length === 0) {
@@ -251,10 +232,7 @@ def wait_for_data_load(driver, old_table=None, timeout=15):
             } catch(e) {}
             if(n.shadowRoot) walk(n.shadowRoot);
             let c = n.firstChild;
-            while(c) {
-                walk(c);
-                c = c.nextSibling;
-            }
+            while(c) { walk(c); c = c.nextSibling; }
         };
         walk(root);
         return found;
@@ -264,32 +242,16 @@ def wait_for_data_load(driver, old_table=None, timeout=15):
 
     while time.time() - start_time < timeout:
         try:
-            # 1. 「データなし」メッセージの検出 (Shadow DOM対応)
-            is_zero = driver.execute_script(check_zero_data_js)
-            if is_zero:
+            if driver.execute_script(check_zero_data_js):
                 return "ZERO_DATA"
-                
-            # 2. メニューオプションボタンがすでに見える状態かチェック
             menu_btns = driver.find_elements(By.XPATH, "//*[contains(@aria-label, 'メニューオプション') or contains(@aria-label, 'Visual menu')]")
             for btn in menu_btns:
                 if btn.is_displayed():
                     return "DATA_PRESENT"
-        except Exception:
+        except:
             pass
         time.sleep(0.5)
     return "TIMEOUT"
-
-
-FILTER_INDEX = {
-    "売上/粗利": 0,
-    "支社": 1,
-    "販売区分": 2,
-    "ルート": 3,
-}
-
-# ==========================================
-# UI操作関数
-# ==========================================
 
 def set_quicksight_filter(driver, filter_name, target_value):
     print(f"  [{filter_name}] → 「{target_value}」")
@@ -1069,11 +1031,76 @@ def main():
                     try:
                         old_table = driver.find_element(By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]")
                     except:
-                        pass
+                        pass# --- 精密化パッチ: ロード遅延対応リトライロジック ---
 
-                    set_quicksight_filter(driver, "販売区分", sc)
-                    print("  データロード待機中...")
-                    load_status = wait_for_data_load(driver, old_table=old_table, timeout=15)
+
+                    max_retries = 3
+
+
+                    retry_count = 0
+
+
+                    load_status = "TIMEOUT"
+
+
+                    while retry_count <= max_retries:
+
+
+                        try:
+
+
+                            set_quicksight_filter(driver, "販売区分", sc)
+
+
+                            print("  データロード待機中...")
+
+
+                            load_status = wait_for_data_load(driver, old_table=old_table, timeout=15)
+
+
+                        except Exception as filter_err:
+
+
+                            print(f"  [警告] フィルター設定エラー: {filter_err}")
+
+
+                            load_status = "TIMEOUT"
+
+
+                        if load_status == "ZERO_DATA":
+
+
+                            is_must_have_data = (route == "a-00 総販") or ("a-00" in route) or (route == "すべて")
+
+
+                            if is_must_have_data and retry_count < max_retries:
+
+
+                                retry_count += 1
+
+
+                                print(f"  [警告] 主要ルート「{route}」で「データなし」を誤検出した可能性があります。ロード遅延とみなして 10 秒待機後にリトライします ({retry_count}/{max_retries})...")
+
+
+                                time.sleep(10)
+
+
+                                try:
+
+
+                                    old_table = driver.find_element(By.XPATH, "//*[contains(@data-automation-id, 'table') or contains(@class, 'quicksight-viz')]")
+
+
+                                except:
+
+
+                                    old_table = None
+
+
+                                continue
+
+
+                        break
                     
                     if load_status == "ZERO_DATA":
                         print("  [情報] 画面に「データなし」を検出しました。実績0件として処理します。")

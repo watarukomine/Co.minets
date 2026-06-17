@@ -154,8 +154,8 @@ def main():
     print(f"Timeline Length: {len(timeline)} (Delta start: {delta_start}, Append elements: {len(timeline) - delta_start})", flush=True)
     print(f"First append date: {timeline[delta_start]}", flush=True)
 
-    target_files = [f for f in os.listdir(DOWNLOAD_DIR) if (f.startswith("【") or f.startswith("[ZERO_DATA]")) and (f.endswith(".csv") or f.endswith(".zip"))]
-    print(f"Total files: {len(target_files)}", flush=True)
+    target_files = ["【粗利】a-00 総販_100_総売上.zip"]
+    print(f"Total files: {len(target_files)} (FORCED SINGLE MODE)", flush=True)
 
     token = get_access_token()
     if not token:
@@ -194,9 +194,10 @@ def main():
         route, classification = rest.split('_', 1) if '_' in rest else (rest, "全体")
         doc_id = f"{metric}_{route}_{classification}".replace("/", "-").replace(" ", "")
 
-        if doc_id in completed_set:
-            skip_count += 1
-            continue
+        # Force sync bypass for single mode
+        # if doc_id in completed_set:
+        #     skip_count += 1
+        #     continue
 
         if f_name.startswith("[ZERO_DATA]"):
             completed_set.add(doc_id)
