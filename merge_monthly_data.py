@@ -91,27 +91,30 @@ def load_target_month_str():
     return None
 
 def validate_csv_content(csv_content, target_month_str):
-    """CSVデータ内に対象年月のレコードが1件以上含まれているか確認する"""
-    if not target_month_str:
-        return True
-        
-    target_prefix = target_month_str
-    target_prefix_slash = target_month_str.replace("-", "/")
-    
+    """CSVデータが空でないか確認し、対象年月の有無は警告として出力する"""
     f = io.StringIO(csv_content)
     reader = csv.DictReader(f)
     row_count = 0
+    has_target = False
+    
+    target_prefix = target_month_str if target_month_str else ""
+    target_prefix_slash = target_month_str.replace("-", "/") if target_month_str else ""
+    
     for row in reader:
         row_count += 1
         date_str = row.get('日付', '')
-        if not date_str:
-            continue
-        if date_str.startswith(target_prefix) or date_str.startswith(target_prefix_slash):
-            return True
-            
+        if date_str and target_month_str:
+            if date_str.startswith(target_prefix) or date_str.startswith(target_prefix_slash):
+                has_target = True
+                
     if row_count == 0:
+        print("  [ERROR] CSVの中身が空です（ヘッダーのみ）。")
         return False
-    return False
+        
+    if target_month_str and not has_target:
+        print(f"  [WARNING] CSV内に対象年月 {target_month_str} のデータが含まれていませんが、データ行が存在するため処理を続行します。")
+        
+    return True
 
 def normalize_date(d_str):
     if not d_str:
@@ -175,21 +178,51 @@ def merge_csv_content(exist_content, new_content):
         if f not in fields:
             fields.append(f)
 
+    # 数値列（上書き・更新の対象となる列）のリスト
+    value_cols = ['当年', '前年', '前年比', '当月実績', '前年実績', '当月粗利', '前年粗利']
+
+    def get_record_key(row):
+        key_parts = []
+        for col in sorted(row.keys()):
+            if col in value_cols:
+                continue
+            val = row[col]
+            if val is not None:
+                val = val.strip()
+            # 日付列や曜日列の場合は正規化
+            if '日付' in col or col == '日付' or col == '曜日' or '曜日' in col:
+                val = normalize_date(val)
+            key_parts.append((col, val))
+        return tuple(key_parts)
+
     for row in exist_rows:
-        _, branch = get_branch_field(row)
-        date_str = normalize_date(row.get('日付', ''))
-        if branch and date_str:
-            row['日付'] = date_str
-            merged[(branch, date_str)] = row
+        # レコード自体の日付/曜日列も正規化しておく
+        for col in list(row.keys()):
+            if '日付' in col or col == '日付' or col == '曜日' or '曜日' in col:
+                row[col] = normalize_date(row.get(col, ''))
+        key = get_record_key(row)
+        if key:
+            merged[key] = row
 
     for row in new_rows:
-        _, branch = get_branch_field(row)
-        date_str = normalize_date(row.get('日付', ''))
-        if branch and date_str:
-            row['日付'] = date_str
-            merged[(branch, date_str)] = row
+        for col in list(row.keys()):
+            if '日付' in col or col == '日付' or col == '曜日' or '曜日' in col:
+                row[col] = normalize_date(row.get(col, ''))
+        key = get_record_key(row)
+        if key:
+            merged[key] = row
 
-    sorted_keys = sorted(merged.keys(), key=lambda x: (x[1], x[0]))
+    def get_sort_fn(key_tuple):
+        date_val = ""
+        branch_val = ""
+        for col, val in key_tuple:
+            if col == '日付' or col == '曜日':
+                date_val = val
+            elif col == '支社' or col == '管轄支社名':
+                branch_val = val
+        return (date_val, branch_val)
+
+    sorted_keys = sorted(merged.keys(), key=get_sort_fn)
 
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fields, lineterminator='\n')
@@ -271,7 +304,7 @@ def process_merge():
             new_content, csv_filename = read_zip_csv(src_file_path)
             
             if not validate_csv_content(new_content, target_month_str):
-                raise ValueError(f"CSV内に対象年月 {target_month_str} のデータが1件も含まれていません。")
+                raise ValueError("CSVデータが空か、または有効な形式ではありません。")
 
             # 既存ファイルの検証（ネットワーク瞬断による誤上書き防止）
             is_exists = safe_x_drive_op(os.path.exists, dest_file_path)
