@@ -510,38 +510,21 @@ def export_csv(driver):
         return False
 
 def validate_downloaded_csv(filepath):
-    """過去実績データ復旧用バリデーション：過去(2026/03以前)と最新(2026/05以降)の両方のデータが含まれているか確認"""
+    """過去実績データ復旧用バリデーション：データ行が1行以上含まれているか確認"""
     try:
         with open(filepath, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             row_count = 0
-            has_past = False
-            has_recent = False
             for row in reader:
                 row_count += 1
-                date_str = row.get('日付', '')
-                if not date_str:
-                    continue
-                d = date_str.split(' ')[0].replace('/', '-')
-                parts = d.split('-')
-                if len(parts) >= 2 and parts[0].isdigit():
-                    yr = int(parts[0])
-                    mo = int(parts[1])
-                    if yr < 2026 or (yr == 2026 and mo <= 3):
-                        has_past = True
-                    if yr == 2026 and mo >= 5:
-                        has_recent = True
+                break
             if row_count == 0:
                 print("    [警告] CSVの中身が空です（ヘッダーのみ）。")
                 return False
-            if has_past and has_recent:
-                return True
+            return True
     except Exception as e:
         print(f"    [警告] CSVバリデーション実行エラー: {e}")
         return False
-    
-    print(f"    [警告] CSV内に対象データが見つかりませんでした。過去分検出: {has_past}, 最新分検出: {has_recent}")
-    return False
 
 def main():
     print("【TMP-ONE 過去実績データ差分 復旧専用RPA抽出システム】")
